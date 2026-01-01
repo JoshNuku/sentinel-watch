@@ -21,8 +21,17 @@ const features = [
 
 const Features = () => {
   return (
-    <section id="features" className="py-24 relative">
+    <section id="features" className="py-24 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-radial opacity-50" />
+      
+      {/* Decorative forest elements in background */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-0 left-0 w-full h-full">
+          <svg className="w-full h-full" viewBox="0 0 1920 800" preserveAspectRatio="none">
+            <path d="M0,400 Q480,300 960,400 T1920,400 L1920,800 L0,800 Z" fill="currentColor" className="text-primary" />
+          </svg>
+        </div>
+      </div>
       
       <div className="container mx-auto px-6 relative z-10">
         <motion.div
@@ -54,9 +63,9 @@ const Features = () => {
               viewport={{ once: true }}
               className="group"
             >
-              <div className="relative p-6 md:p-8 h-full rounded-xl border border-border/40 bg-card/30 hover:border-primary/30 transition-all duration-300">
+              <div className="relative p-6 md:p-8 h-full rounded-xl border border-border/40 bg-card/30 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10">
                 {/* Icon */}
-                <div className="w-12 h-12 rounded-lg border border-primary/30 bg-primary/5 flex items-center justify-center mb-6">
+                <div className="w-12 h-12 rounded-lg border border-primary/30 bg-primary/5 flex items-center justify-center mb-6 group-hover:border-primary/50 group-hover:bg-primary/10 transition-all">
                   <feature.icon className="h-5 w-5 text-primary" />
                 </div>
                 
@@ -64,6 +73,9 @@ const Features = () => {
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   {feature.description}
                 </p>
+                
+                {/* Hover effect indicator */}
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             </motion.div>
           ))}

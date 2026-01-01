@@ -1,0 +1,39 @@
+<svg width="800" height="600" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Mining excavator silhouette -->
+  <defs>
+    <linearGradient id="miningGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4a3520;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#2a1f10;stop-opacity:0.6" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Excavator body -->
+  <g fill="#d97706" opacity="0.7">
+    <!-- Tracks -->
+    <rect x="200" y="450" width="250" height="60" rx="30"/>
+    
+    <!-- Body -->
+    <rect x="230" y="380" width="180" height="80" rx="10"/>
+    
+    <!-- Cabin -->
+    <rect x="320" y="320" width="90" height="70" rx="5"/>
+    <rect x="330" y="330" width="70" height="50" fill="#fbbf24" opacity="0.3"/>
+    
+    <!-- Arm segments -->
+    <rect x="350" y="260" width="20" height="70" rx="5" transform="rotate(-30 360 260)"/>
+    <rect x="320" y="150" width="20" height="90" rx="5" transform="rotate(-60 330 150)"/>
+    
+    <!-- Bucket -->
+    <path d="M280,100 L320,120 L310,150 L270,135 Z" fill="#d97706"/>
+    <path d="M270,135 L260,140 L250,130 L260,120 Z" fill="#b45309"/>
+  </g>
+  
+  <!-- Warning stripes -->
+  <g opacity="0.4">
+    <rect x="230" y="390" width="20" height="15" fill="#fbbf24"/>
+    <rect x="270" y="390" width="20" height="15" fill="#fbbf24"/>
+    <rect x="310" y="390" width="20" height="15" fill="#fbbf24"/>
+    <rect x="350" y="390" width="20" height="15" fill="#fbbf24"/>
+    <rect x="390" y="390" width="20" height="15" fill="#fbbf24"/>
+  </g>
+</svg>
