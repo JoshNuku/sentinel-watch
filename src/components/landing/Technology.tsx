@@ -60,7 +60,19 @@ const Technology = () => {
             className="relative"
           >
             <div className="aspect-square rounded-3xl bg-card border border-border overflow-hidden relative">
-              {/* Placeholder for sentinel visualization */}
+              {/* Background with forest and mining context */}
+              <div className="absolute inset-0 bg-gradient-to-br from-card via-card to-primary/5" />
+              
+              {/* Mining equipment overlay */}
+              <div className="absolute bottom-0 right-0 w-3/4 h-3/4 opacity-20">
+                <img 
+                  src="/images/mining-equipment.svg" 
+                  alt="" 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              
+              {/* Sentinel surveillance visualization */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative">
                   {/* Radar animation */}
@@ -81,6 +93,18 @@ const Technology = () => {
                   >
                     <div className="w-1/2 h-0.5 bg-gradient-to-r from-primary to-transparent absolute top-1/2 left-1/2" />
                   </motion.div>
+                  
+                  {/* Detection indicators */}
+                  <motion.div
+                    className="absolute top-1/4 right-1/4 w-3 h-3 rounded-full bg-warning"
+                    animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                  <motion.div
+                    className="absolute bottom-1/3 left-1/4 w-2 h-2 rounded-full bg-primary"
+                    animate={{ scale: [1, 1.3, 1], opacity: [0.6, 1, 0.6] }}
+                    transition={{ duration: 2.5, repeat: Infinity, delay: 0.5 }}
+                  />
                 </div>
               </div>
               

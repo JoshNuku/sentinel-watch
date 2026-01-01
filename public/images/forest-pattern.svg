@@ -1,0 +1,38 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Forest silhouette pattern -->
+  <defs>
+    <linearGradient id="forestGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a3d1f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#051810;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="1920" height="1080" fill="url(#forestGradient)"/>
+  
+  <!-- Tree silhouettes -->
+  <g opacity="0.3">
+    <!-- Large trees -->
+    <path d="M100,800 L120,600 L140,800 Z" fill="#1a5c3a"/>
+    <path d="M110,850 L130,700 L150,850 Z" fill="#0f4428"/>
+    <path d="M250,800 L280,550 L310,800 Z" fill="#1a5c3a"/>
+    <path d="M450,800 L480,600 L510,800 Z" fill="#0f4428"/>
+    <path d="M650,850 L690,650 L730,850 Z" fill="#1a5c3a"/>
+    <path d="M850,800 L880,580 L910,800 Z" fill="#0f4428"/>
+    <path d="M1050,850 L1090,620 L1130,850 Z" fill="#1a5c3a"/>
+    <path d="M1250,800 L1280,590 L1310,800 Z" fill="#0f4428"/>
+    <path d="M1450,850 L1490,640 L1530,850 Z" fill="#1a5c3a"/>
+    <path d="M1650,800 L1680,600 L1710,800 Z" fill="#0f4428"/>
+    <path d="M1850,850 L1880,650 L1910,850 Z" fill="#1a5c3a"/>
+    
+    <!-- Medium trees -->
+    <path d="M180,850 L200,700 L220,850 Z" fill="#0f4428" opacity="0.8"/>
+    <path d="M380,850 L400,720 L420,850 Z" fill="#1a5c3a" opacity="0.8"/>
+    <path d="M580,850 L600,710 L620,850 Z" fill="#0f4428" opacity="0.8"/>
+    <path d="M780,850 L800,700 L820,850 Z" fill="#1a5c3a" opacity="0.8"/>
+    <path d="M980,850 L1000,720 L1020,850 Z" fill="#0f4428" opacity="0.8"/>
+    <path d="M1180,850 L1200,710 L1220,850 Z" fill="#1a5c3a" opacity="0.8"/>
+    <path d="M1380,850 L1400,700 L1420,850 Z" fill="#0f4428" opacity="0.8"/>
+    <path d="M1580,850 L1600,720 L1620,850 Z" fill="#1a5c3a" opacity="0.8"/>
+    <path d="M1780,850 L1800,710 L1820,850 Z" fill="#0f4428" opacity="0.8"/>
+  </g>
+</svg>

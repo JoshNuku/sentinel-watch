@@ -6,12 +6,21 @@ import { motion } from "framer-motion";
 const Hero = () => {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+      {/* Forest background layer */}
+      <div className="absolute inset-0">
+        <img 
+          src="/images/forest-pattern.svg" 
+          alt="" 
+          className="w-full h-full object-cover opacity-40"
+        />
+      </div>
+      
       {/* Background effects */}
-      <div className="absolute inset-0 bg-gradient-dark" />
+      <div className="absolute inset-0 bg-gradient-dark opacity-80" />
       <div className="absolute inset-0 bg-gradient-radial" />
       
-      {/* Animated grid */}
-      <div className="absolute inset-0 opacity-20">
+      {/* Animated grid overlay */}
+      <div className="absolute inset-0 opacity-10">
         <div 
           className="absolute inset-0"
           style={{
@@ -22,7 +31,7 @@ const Hero = () => {
         />
       </div>
 
-      {/* Floating elements */}
+      {/* Floating elements - trees and protection indicators */}
       <motion.div 
         className="absolute top-1/4 left-1/4 w-2 h-2 bg-primary rounded-full"
         animate={{ 
@@ -47,6 +56,28 @@ const Hero = () => {
         }}
         transition={{ duration: 3.5, repeat: Infinity, delay: 0.5 }}
       />
+      
+      {/* Additional forest indicators */}
+      <motion.div
+        className="absolute top-1/2 left-1/6"
+        animate={{ 
+          scale: [1, 1.2, 1],
+          opacity: [0.3, 0.6, 0.3]
+        }}
+        transition={{ duration: 4, repeat: Infinity, delay: 1.5 }}
+      >
+        <TreePine className="h-6 w-6 text-primary/40" />
+      </motion.div>
+      <motion.div
+        className="absolute bottom-1/4 right-1/5"
+        animate={{ 
+          scale: [1, 1.2, 1],
+          opacity: [0.3, 0.6, 0.3]
+        }}
+        transition={{ duration: 3.5, repeat: Infinity, delay: 0.8 }}
+      >
+        <TreePine className="h-5 w-5 text-primary/30" />
+      </motion.div>
 
       <div className="container mx-auto px-6 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
@@ -86,7 +117,14 @@ const Hero = () => {
                 <ArrowRight className="transition-transform group-hover:translate-x-1" />
               </Button>
             </Link>
-            <Button variant="outline" size="xl">
+            <Button 
+              variant="outline" 
+              size="xl"
+              onClick={() => {
+                const element = document.getElementById("features");
+                element?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
               Learn More
             </Button>
           </motion.div>
