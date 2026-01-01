@@ -15,6 +15,15 @@ const Technology = () => {
     <section id="technology" className="py-24 relative">
       <div className="absolute inset-0 bg-gradient-radial opacity-30" />
       
+      {/* Environmental damage context background */}
+      <div className="absolute inset-0 opacity-5">
+        <img 
+          src="/images/environmental-damage.svg" 
+          alt="" 
+          className="w-full h-full object-cover"
+        />
+      </div>
+      
       <div className="container mx-auto px-6 relative z-10">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
           <motion.div
@@ -63,10 +72,10 @@ const Technology = () => {
               {/* Background with forest and mining context */}
               <div className="absolute inset-0 bg-gradient-to-br from-card via-card to-primary/5" />
               
-              {/* Mining equipment overlay */}
+              {/* Ghana mining threat overlay */}
               <div className="absolute bottom-0 right-0 w-3/4 h-3/4 opacity-20">
                 <img 
-                  src="/images/mining-equipment.svg" 
+                  src="/images/ghana-mining-threat.svg" 
                   alt="" 
                   className="w-full h-full object-contain"
                 />

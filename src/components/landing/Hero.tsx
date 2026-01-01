@@ -6,10 +6,10 @@ import { motion } from "framer-motion";
 const Hero = () => {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
-      {/* Forest background layer */}
+      {/* Ghana Forest background layer */}
       <div className="absolute inset-0">
         <img 
-          src="/images/forest-pattern.svg" 
+          src="/images/ghana-forest-hero.svg" 
           alt="" 
           className="w-full h-full object-cover opacity-40"
         />

@@ -25,7 +25,16 @@ const steps = [
 const HowItWorks = () => {
   return (
     <section id="how-it-works" className="py-24 relative overflow-hidden">
-      {/* Background pattern */}
+      {/* Forest monitoring background */}
+      <div className="absolute inset-0 opacity-8">
+        <img 
+          src="/images/forest-monitoring-night.svg" 
+          alt="" 
+          className="w-full h-full object-cover"
+        />
+      </div>
+      
+      {/* Overlay pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{
           backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 35px, hsl(var(--primary)) 35px, hsl(var(--primary)) 36px)`

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a472a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f2e1a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="forestGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2d5a3d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1a3d2a;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ffd700;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#ffd700;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Sky background -->
+  <rect width="1920" height="1080" fill="url(#skyGradient)"/>
+  
+  <!-- Sun glow in distance -->
+  <circle cx="1600" cy="300" r="400" fill="url(#sunGlow)"/>
+  
+  <!-- Distant forest layers -->
+  <ellipse cx="960" cy="900" rx="1200" ry="400" fill="#0f2e1a" opacity="0.6"/>
+  
+  <!-- Mid-distance trees -->
+  <path d="M 0,700 Q 240,650 480,700 T 960,700 T 1440,700 T 1920,700 L 1920,1080 L 0,1080 Z" fill="#1a3d2a" opacity="0.8"/>
+  
+  <!-- Foreground tree silhouettes - tropical trees -->
+  <g opacity="0.9" fill="url(#forestGradient)">
+    <!-- Left tree group -->
+    <ellipse cx="200" cy="650" rx="80" ry="120"/>
+    <rect x="190" y="650" width="20" height="150" rx="5"/>
+    <ellipse cx="180" cy="700" rx="60" ry="90"/>
+    <ellipse cx="220" cy="720" rx="50" ry="80"/>
+    
+    <!-- Center left tree -->
+    <ellipse cx="450" cy="600" rx="100" ry="150"/>
+    <rect x="438" y="600" width="24" height="180" rx="6"/>
+    <ellipse cx="430" cy="650" rx="70" ry="100"/>
+    <ellipse cx="470" cy="680" rx="60" ry="90"/>
+    
+    <!-- Center tree (prominent) -->
+    <ellipse cx="700" cy="550" rx="120" ry="180"/>
+    <rect x="686" y="550" width="28" height="220" rx="7"/>
+    <ellipse cx="680" cy="600" rx="90" ry="130"/>
+    <ellipse cx="720" cy="640" rx="80" ry="120"/>
+    <ellipse cx="700" cy="680" rx="70" ry="100"/>
+    
+    <!-- Right center tree -->
+    <ellipse cx="1100" cy="580" rx="110" ry="160"/>
+    <rect x="1086" y="580" width="26" height="200" rx="6"/>
+    <ellipse cx="1080" cy="630" rx="80" ry="110"/>
+    <ellipse cx="1120" cy="670" rx="70" ry="100"/>
+    
+    <!-- Right tree group -->
+    <ellipse cx="1500" cy="620" rx="95" ry="140"/>
+    <rect x="1487" y="620" width="24" height="180" rx="6"/>
+    <ellipse cx="1480" cy="670" rx="65" ry="95"/>
+    <ellipse cx="1520" cy="700" rx="60" ry="85"/>
+    
+    <!-- Far right tree -->
+    <ellipse cx="1750" cy="680" rx="70" ry="110"/>
+    <rect x="1739" y="680" width="22" height="160" rx="5"/>
+    <ellipse cx="1730" cy="720" rx="50" ry="75"/>
+  </g>
+  
+  <!-- Ground vegetation -->
+  <path d="M 0,850 Q 480,820 960,850 T 1920,850 L 1920,1080 L 0,1080 Z" fill="#0a1f14" opacity="0.7"/>
+  
+  <!-- Foreground undergrowth -->
+  <g opacity="0.8" fill="#0a1f14">
+    <ellipse cx="300" cy="950" rx="150" ry="60"/>
+    <ellipse cx="800" cy="980" rx="200" ry="70"/>
+    <ellipse cx="1300" cy="960" rx="180" ry="65"/>
+    <ellipse cx="1700" cy="990" rx="160" ry="55"/>
+  </g>
+  
+  <!-- Mist/atmosphere effect -->
+  <rect width="1920" height="1080" fill="url(#skyGradient)" opacity="0.1"/>
+</svg>

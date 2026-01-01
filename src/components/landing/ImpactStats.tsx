@@ -14,6 +14,15 @@ const ImpactStats = () => {
       {/* Background elements */}
       <div className="absolute inset-0 bg-gradient-to-b from-card/20 to-transparent" />
       
+      {/* Ghana river background */}
+      <div className="absolute inset-0 opacity-15">
+        <img 
+          src="/images/ghana-river.svg" 
+          alt="" 
+          className="w-full h-full object-cover"
+        />
+      </div>
+      
       <div className="container mx-auto px-6 relative z-10">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((stat, index) => (

@@ -24,13 +24,13 @@ const Features = () => {
     <section id="features" className="py-24 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-radial opacity-50" />
       
-      {/* Decorative forest elements in background */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-0 left-0 w-full h-full">
-          <svg className="w-full h-full" viewBox="0 0 1920 800" preserveAspectRatio="none">
-            <path d="M0,400 Q480,300 960,400 T1920,400 L1920,800 L0,800 Z" fill="currentColor" className="text-primary" />
-          </svg>
-        </div>
+      {/* Ghana tropical canopy background */}
+      <div className="absolute inset-0 opacity-10">
+        <img 
+          src="/images/tropical-canopy.svg" 
+          alt="" 
+          className="w-full h-full object-cover"
+        />
       </div>
       
       <div className="container mx-auto px-6 relative z-10">

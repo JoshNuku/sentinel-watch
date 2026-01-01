@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="canopyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2ecc71;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#27ae60;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e8449;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="leafGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#a8e6cf;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#2ecc71;stop-opacity:0" />
+    </radialGradient>
+    <filter id="blur">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
+    </filter>
+  </defs>
+  
+  <!-- Deep forest background -->
+  <rect width="1200" height="800" fill="#1a5f3a"/>
+  
+  <!-- Light rays through canopy -->
+  <g opacity="0.15">
+    <polygon points="300,0 320,0 400,800 380,800" fill="#fff"/>
+    <polygon points="650,0 670,0 750,800 730,800" fill="#fff"/>
+    <polygon points="950,0 970,0 1050,800 1030,800" fill="#fff"/>
+  </g>
+  
+  <!-- Canopy layers - back to front -->
+  <g opacity="0.6" fill="#1e8449">
+    <ellipse cx="200" cy="150" rx="180" ry="140"/>
+    <ellipse cx="500" cy="100" rx="200" ry="150"/>
+    <ellipse cx="800" cy="180" rx="190" ry="145"/>
+    <ellipse cx="1000" cy="120" rx="170" ry="130"/>
+  </g>
+  
+  <g opacity="0.7" fill="#27ae60">
+    <ellipse cx="150" cy="250" rx="160" ry="120"/>
+    <ellipse cx="400" cy="220" rx="180" ry="135"/>
+    <ellipse cx="700" cy="280" rx="200" ry="150"/>
+    <ellipse cx="950" cy="240" rx="170" ry="125"/>
+    <ellipse cx="1100" cy="300" rx="150" ry="110"/>
+  </g>
+  
+  <!-- Main canopy layer -->
+  <g fill="url(#canopyGradient)">
+    <ellipse cx="100" cy="350" rx="150" ry="120"/>
+    <ellipse cx="300" cy="380" rx="180" ry="140"/>
+    <ellipse cx="550" cy="340" rx="200" ry="160"/>
+    <ellipse cx="800" cy="400" rx="190" ry="145"/>
+    <ellipse cx="1000" cy="360" rx="170" ry="130"/>
+  </g>
+  
+  <!-- Individual leaf clusters -->
+  <g opacity="0.9" fill="#2ecc71">
+    <ellipse cx="250" cy="450" rx="80" ry="60"/>
+    <ellipse cx="450" cy="480" rx="90" ry="70"/>
+    <ellipse cx="650" cy="440" rx="85" ry="65"/>
+    <ellipse cx="850" cy="490" rx="95" ry="75"/>
+  </g>
+  
+  <!-- Foreground leaves with details -->
+  <g opacity="0.95">
+    <ellipse cx="180" cy="550" rx="100" ry="80" fill="#2ecc71"/>
+    <ellipse cx="180" cy="550" rx="95" ry="75" fill="url(#canopyGradient)"/>
+    
+    <ellipse cx="600" cy="580" rx="110" ry="90" fill="#2ecc71"/>
+    <ellipse cx="600" cy="580" rx="105" ry="85" fill="url(#canopyGradient)"/>
+    
+    <ellipse cx="950" cy="560" rx="105" ry="85" fill="#2ecc71"/>
+    <ellipse cx="950" cy="560" rx="100" ry="80" fill="url(#canopyGradient)"/>
+  </g>
+  
+  <!-- Leaf veins and details -->
+  <g stroke="#1e8449" stroke-width="1" opacity="0.3" fill="none">
+    <line x1="180" y1="520" x2="180" y2="580"/>
+    <line x1="160" y1="540" x2="200" y2="545"/>
+    <line x1="160" y1="555" x2="200" y2="560"/>
+    
+    <line x1="600" y1="545" x2="600" y2="615"/>
+    <line x1="575" y1="570" x2="625" y2="575"/>
+    <line x1="575" y1="590" x2="625" y2="595"/>
+  </g>
+  
+  <!-- Atmospheric depth -->
+  <rect width="1200" height="400" fill="#1a5f3a" opacity="0.2"/>
+  
+  <!-- Lower vegetation and undergrowth -->
+  <g opacity="0.8" fill="#0f4d2a">
+    <ellipse cx="150" cy="700" rx="120" ry="60"/>
+    <ellipse cx="400" cy="720" rx="140" ry="70"/>
+    <ellipse cx="700" cy="690" rx="130" ry="65"/>
+    <ellipse cx="950" cy="730" rx="150" ry="75"/>
+  </g>
+  
+  <!-- Ferns and forest floor -->
+  <path d="M 0,750 Q 300,720 600,750 T 1200,750 L 1200,800 L 0,800 Z" fill="#0a3d1f"/>
+  
+  <!-- Ambient light glow -->
+  <circle cx="300" cy="200" r="150" fill="url(#leafGlow)" filter="url(#blur)"/>
+  <circle cx="800" cy="250" r="130" fill="url(#leafGlow)" filter="url(#blur)"/>
+</svg>
