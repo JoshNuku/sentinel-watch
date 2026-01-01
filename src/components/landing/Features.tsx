@@ -44,7 +44,7 @@ const Features = () => {
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-3 gap-6 md:gap-8">
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}
@@ -54,16 +54,14 @@ const Features = () => {
               viewport={{ once: true }}
               className="group"
             >
-              <div className="glass rounded-2xl p-8 h-full transition-all duration-300 hover:border-primary/50 hover:shadow-glow">
-                <div className="relative mb-6">
-                  <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                    <feature.icon className="h-7 w-7 text-primary" />
-                  </div>
-                  <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative p-6 md:p-8 h-full rounded-xl border border-border/40 bg-card/30 hover:border-primary/30 transition-all duration-300">
+                {/* Icon */}
+                <div className="w-12 h-12 rounded-lg border border-primary/30 bg-primary/5 flex items-center justify-center mb-6">
+                  <feature.icon className="h-5 w-5 text-primary" />
                 </div>
                 
-                <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">
+                <h3 className="text-lg font-semibold mb-2 text-foreground">{feature.title}</h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">
                   {feature.description}
                 </p>
               </div>

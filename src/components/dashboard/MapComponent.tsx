@@ -101,11 +101,11 @@ const MapComponent = () => {
   }, []);
 
   return (
-    <div className="relative w-full h-full rounded-xl overflow-hidden border border-border">
-      <div ref={mapRef} className="w-full h-full" style={{ minHeight: "400px" }} />
+    <div className="relative w-full h-full rounded-xl overflow-hidden border border-border isolate">
+      <div ref={mapRef} className="w-full h-full z-0" style={{ minHeight: "400px" }} />
       
       {/* Map overlay legend */}
-      <div className="absolute bottom-4 left-4 glass rounded-lg p-3 z-[1000]">
+      <div className="absolute bottom-4 left-4 rounded-lg p-3 z-10 bg-card/90 backdrop-blur-sm border border-border">
         <p className="text-xs font-medium mb-2 text-muted-foreground">Status Legend</p>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
