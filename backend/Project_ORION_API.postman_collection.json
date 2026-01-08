@@ -1,0 +1,202 @@
+{
+  "info": {
+    "name": "Project ORION API",
+    "description": "API collection for testing Project ORION backend endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Info",
+      "item": [
+        {
+          "name": "API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"]
+            }
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sentinels",
+      "item": [
+        {
+          "name": "Register Sentinel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"ORN-001\",\n  \"location\": {\n    \"lat\": 1.3521,\n    \"lng\": 103.8198\n  },\n  \"batteryLevel\": 95,\n  \"ipAddress\": \"192.168.1.100\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sentinels/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentinels", "register"]
+            }
+          }
+        },
+        {
+          "name": "Get All Sentinels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentinels",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentinels"]
+            }
+          }
+        },
+        {
+          "name": "Get Sentinel by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentinels/ORN-001",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentinels", "ORN-001"]
+            }
+          }
+        },
+        {
+          "name": "Update Sentinel Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"alert\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sentinels/ORN-001/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentinels", "ORN-001", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alerts",
+      "item": [
+        {
+          "name": "Create Alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sentinelId\": \"ORN-001\",\n  \"threatType\": \"Excavator\",\n  \"confidence\": 0.95,\n  \"location\": {\n    \"lat\": 1.3521,\n    \"lng\": 103.8198\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/alerts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "alerts"]
+            }
+          }
+        },
+        {
+          "name": "Get All Alerts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/alerts?limit=10&page=1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "alerts"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Alert Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/alerts/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "alerts", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Verify Alert",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isVerified\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/alerts/:alertId/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "alerts", ":alertId", "verify"],
+              "variable": [
+                {
+                  "key": "alertId",
+                  "value": "REPLACE_WITH_ACTUAL_ALERT_ID"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,7 @@
-import { useState, useMemo } from "react";
-import { alerts, sentinels, getTimeAgo, type Alert } from "@/lib/dummy-data";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { alertAPI, type Alert } from "@/services/api";
+import { wsService } from "@/services/websocket";
 import { 
   Bell, 
   Search, 
@@ -11,7 +13,9 @@ import {
   Droplets,
   MapPin,
   Clock,
-  Radio
+  Radio,
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,33 +28,80 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { format } from "date-fns";
 
 const threatIcons = {
   Excavator: Construction,
-  Vehicle: Truck,
+  'Dump-Truck': Truck,
   'Water Pump': Droplets,
+  Person: Radio,
 };
 
 const Alerts = () => {
+  const navigate = useNavigate();
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "verified" | "unverified">("all");
   const [threatFilter, setThreatFilter] = useState<string>("all");
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [verifying, setVerifying] = useState<string | null>(null);
 
-  // Extended alerts for demo
-  const extendedAlerts: Alert[] = [
-    ...alerts,
-    { id: 'ALERT-003', sentinelId: 'ORN-001', threatType: 'Water Pump', timestamp: '2023-10-27T06:15:00Z', location: { lat: 5.6037, lng: -0.1870 }, isVerified: true },
-    { id: 'ALERT-004', sentinelId: 'ORN-004', threatType: 'Excavator', timestamp: '2023-10-26T22:45:00Z', location: { lat: 5.5800, lng: -0.1700 }, isVerified: false },
-    { id: 'ALERT-005', sentinelId: 'ORN-002', threatType: 'Vehicle', timestamp: '2023-10-26T14:20:00Z', location: { lat: 5.5560, lng: -0.2010 }, isVerified: true },
-  ];
+  const fetchAlerts = async () => {
+    try {
+      setLoading(true);
+      const response = await alertAPI.getAll({ limit: 50 });
+      setAlerts(response.data);
+    } catch (error) {
+      console.error('Failed to fetch alerts:', error);
+      toast.error('Failed to load alerts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+
+    // Connect to WebSocket for real-time alerts
+    wsService.connect();
+
+    // Listen for new alerts
+    const unsubscribe = wsService.onNewAlert((data) => {
+      console.log('📡 New alert received via WebSocket:', data);
+      setAlerts(prev => [data.alert, ...prev]);
+      toast.success(`New ${data.alert.threatType} detected by ${data.alert.sentinelId}!`);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const handleVerify = async (alertId: string, isVerified: boolean) => {
+    try {
+      setVerifying(alertId);
+      await alertAPI.verify(alertId, isVerified);
+      setAlerts(prev => prev.map(a => 
+        a._id === alertId ? { ...a, isVerified } : a
+      ));
+      toast.success(isVerified ? 'Alert verified' : 'Alert unverified');
+    } catch (error) {
+      console.error('Failed to verify alert:', error);
+      toast.error('Failed to update alert');
+    } finally {
+      setVerifying(null);
+    }
+  };
 
   const filteredAlerts = useMemo(() => {
-    return extendedAlerts.filter(alert => {
+    return alerts.filter(alert => {
       const matchesSearch = 
         alert.sentinelId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         alert.threatType.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        alert.id.toLowerCase().includes(searchQuery.toLowerCase());
+        alert._id.toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesStatus = 
         statusFilter === "all" ||
@@ -62,10 +113,23 @@ const Alerts = () => {
 
       return matchesSearch && matchesStatus && matchesThreat;
     });
-  }, [searchQuery, statusFilter, threatFilter, extendedAlerts]);
+  }, [searchQuery, statusFilter, threatFilter, alerts]);
 
-  const unverifiedCount = extendedAlerts.filter(a => !a.isVerified).length;
+  const unverifiedCount = alerts.filter(a => !a.isVerified).length;
 
+  const getTimeAgo = (timestamp: string) => {
+    const now = new Date();
+    const date = new Date(timestamp);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) return `${diffDays}d ago`;
+    if (diffHours > 0) return `${diffHours}h ago`;
+    if (diffMins > 0) return `${diffMins}m ago`;
+    return 'Just now';
+  };
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
@@ -75,11 +139,15 @@ const Alerts = () => {
           <p className="text-muted-foreground text-sm">Monitor and verify detected threats</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchAlerts} disabled={loading}>
+            <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+            Refresh
+          </Button>
           <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
             {unverifiedCount} Unverified
           </Badge>
           <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-            {extendedAlerts.length} Total
+            {alerts.length} Total
           </Badge>
         </div>
       </div>
@@ -117,8 +185,9 @@ const Alerts = () => {
             <SelectContent>
               <SelectItem value="all">All Threats</SelectItem>
               <SelectItem value="Excavator">Excavator</SelectItem>
-              <SelectItem value="Vehicle">Vehicle</SelectItem>
+              <SelectItem value="Dump-Truck">Dump Truck</SelectItem>
               <SelectItem value="Water Pump">Water Pump</SelectItem>
+              <SelectItem value="Person">Person</SelectItem>
             </SelectContent>
           </Select>
           <Button 
@@ -139,15 +208,21 @@ const Alerts = () => {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Alerts List */}
         <div className="lg:col-span-2 space-y-3">
-          {filteredAlerts.length === 0 ? (
+          {loading ? (
+            <div className="glass rounded-xl p-8 text-center">
+              <Loader2 className="h-12 w-12 mx-auto mb-4 text-primary animate-spin" />
+              <p className="text-muted-foreground">Loading alerts...</p>
+            </div>
+          ) : filteredAlerts.length === 0 ? (
             <div className="glass rounded-xl p-8 text-center">
               <Bell className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">No alerts match your filters</p>
             </div>
           ) : (
             filteredAlerts.map((alert) => {
-              const ThreatIcon = threatIcons[alert.threatType];
-              const isSelected = selectedAlert?.id === alert.id;
+              const ThreatIcon = threatIcons[alert.threatType] || Radio;
+              const isSelected = selectedAlert?._id === alert._id;
+              const isVerifyingThisAlert = verifying === alert._id;
               
               return (
                 <div 
@@ -230,7 +305,7 @@ const Alerts = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Alert ID</span>
-                    <span className="font-mono">{selectedAlert.id}</span>
+                    <span className="font-mono">{selectedAlert._id.slice(-8)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Sentinel</span>
@@ -242,7 +317,7 @@ const Alerts = () => {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Time</span>
-                    <span>{new Date(selectedAlert.timestamp).toLocaleString()}</span>
+                    <span>{format(new Date(selectedAlert.timestamp), 'PPpp')}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Coordinates</span>
@@ -252,13 +327,50 @@ const Alerts = () => {
                   </div>
                 </div>
                 <div className="pt-4 space-y-2">
-                  {!selectedAlert.isVerified && (
-                    <Button className="w-full" variant="glow">
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Verify Alert
+                  {!selectedAlert.isVerified ? (
+                    <Button 
+                      className="w-full" 
+                      variant="glow"
+                      onClick={() => handleVerify(selectedAlert._id, true)}
+                      disabled={verifying === selectedAlert._id}
+                    >
+                      {verifying === selectedAlert._id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Verify Alert
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      className="w-full" 
+                      variant="outline"
+                      onClick={() => handleVerify(selectedAlert._id, false)}
+                      disabled={verifying === selectedAlert._id}
+                    >
+                      {verifying === selectedAlert._id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Unverify Alert
+                        </>
+                      )}
                     </Button>
                   )}
-                  <Button variant="outline" className="w-full">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => navigate('/dashboard/map', { state: { sentinelId: selectedAlert.sentinelId } })}
+                  >
                     View on Map
                   </Button>
                 </div>

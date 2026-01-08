@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { 
   Radar, 
   LayoutDashboard, 
@@ -26,6 +27,7 @@ const DashboardLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { logout, user } = useAuth();
 
   const handleNavClick = () => {
     setMobileOpen(false);
@@ -107,13 +109,19 @@ const DashboardLayout = () => {
 
         {/* Bottom section */}
         <div className="p-4 border-t border-sidebar-border space-y-2">
-          <Link
-            to="/"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+          {!collapsed && user && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">{user.name}</div>
+              <div className="truncate">{user.email}</div>
+            </div>
+          )}
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors w-full"
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
             {!collapsed && <span className="font-medium">Logout</span>}
-          </Link>
+          </button>
           
           <Button
             variant="ghost"
@@ -158,14 +166,19 @@ const DashboardLayout = () => {
 
         {/* Bottom section */}
         <div className="p-4 border-t border-sidebar-border">
-          <Link
-            to="/"
-            onClick={handleNavClick}
-            className="flex items-center gap-3 px-3 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+          {user && (
+            <div className="px-3 py-2 mb-2 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">{user.name}</div>
+              <div className="truncate">{user.email}</div>
+            </div>
+          )}
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 px-3 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors w-full"
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
             <span className="font-medium">Logout</span>
-          </Link>
+          </button>
         </div>
       </aside>
 

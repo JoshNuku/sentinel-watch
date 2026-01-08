@@ -1,16 +1,29 @@
-import { type Alert, getTimeAgo } from "@/lib/dummy-data";
+import { type Alert } from "@/services/api";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, AlertTriangle, Truck, Droplets, Construction } from "lucide-react";
+import { CheckCircle, AlertTriangle, Truck, Droplets, Construction, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
 
 interface AlertCardProps {
   alert: Alert;
 }
 
-const threatIcons = {
+const threatIcons: Record<string, any> = {
   Excavator: Construction,
   Vehicle: Truck,
   "Water Pump": Droplets,
+  person: User,
+  car: Truck,
+  truck: Truck,
+  Person: User,
+};
+
+const getTimeAgo = (timestamp: string) => {
+  try {
+    return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+  } catch {
+    return 'Unknown time';
+  }
 };
 
 const AlertCard = ({ alert }: AlertCardProps) => {

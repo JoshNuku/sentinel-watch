@@ -1,0 +1,27 @@
+# Raspberry Pi Sentinel - Python Dependencies
+
+# Core Libraries
+opencv-python==4.8.1.78
+numpy==1.24.3
+requests==2.31.0
+Flask==3.0.0
+RPi.GPIO==0.7.1
+
+# AI Inference (Choose ONE based on your model format)
+# Option 1: ONNX Runtime (Recommended - easier to install)
+onnxruntime==1.16.3
+
+# Option 2: MindSpore Lite (Huawei AI - requires manual installation)
+# See: https://www.mindspore.cn/lite/docs/en/master/use/downloads.html
+# Download ARM64 wheel and install with: pip3 install mindspore_lite-*.whl
+
+# Optional: GPS Support (if using USB GPS module)
+pyserial==3.5
+pynmea2==1.19.0
+
+# Optional: Battery Monitoring (INA219 sensor)
+# adafruit-circuitpython-ina219==3.4.0
+
+# Utilities
+Pillow==10.1.0
+python-dateutil==2.8.2
