@@ -1,21 +1,29 @@
 import { type Alert } from "@/services/api";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, AlertTriangle, Truck, Droplets, Construction, User } from "lucide-react";
+import { CheckCircle, AlertTriangle, Truck, Droplets, Construction, User, Bike, Bus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
 interface AlertCardProps {
   alert: Alert;
+  onVerify?: (alertId: string, isVerified: boolean) => Promise<void>;
+  verifying?: boolean;
 }
 
+// Map threat types from both old system and new Pi system
 const threatIcons: Record<string, any> = {
+  // Old threat types
   Excavator: Construction,
   Vehicle: Truck,
   "Water Pump": Droplets,
+  Dredge: Construction,
+  // New Pi threat types (lowercase)
   person: User,
+  Person: User,
   car: Truck,
   truck: Truck,
-  Person: User,
+  motorcycle: Bike,
+  bus: Bus,
 };
 
 const getTimeAgo = (timestamp: string) => {
@@ -26,8 +34,14 @@ const getTimeAgo = (timestamp: string) => {
   }
 };
 
-const AlertCard = ({ alert }: AlertCardProps) => {
+const AlertCard = ({ alert, onVerify, verifying }: AlertCardProps) => {
   const ThreatIcon = threatIcons[alert.threatType] || AlertTriangle;
+  
+  const handleVerify = async () => {
+    if (onVerify) {
+      await onVerify(alert._id, true);
+    }
+  };
   
   return (
     <div 
@@ -71,9 +85,14 @@ const AlertCard = ({ alert }: AlertCardProps) => {
           </div>
         </div>
         
-        {!alert.isVerified && (
-          <Button variant="glow" size="sm">
-            Verify
+        {!alert.isVerified && onVerify && (
+          <Button 
+            variant="glow" 
+            size="sm"
+            onClick={handleVerify}
+            disabled={verifying}
+          >
+            {verifying ? 'Verifying...' : 'Verify'}
           </Button>
         )}
       </div>

@@ -9,6 +9,8 @@ interface MapComponentProps {
   onSentinelSelect: (sentinel: Sentinel) => void;
   loading?: boolean;
   onViewLiveFeed?: (sentinel: Sentinel) => void;
+  onStopFeed?: (sentinel: Sentinel) => void;
+  isStreamActive?: boolean; // Track if stream is actually active
 }
 
 const getMarkerColor = (status: Sentinel["status"]) => {
@@ -46,7 +48,7 @@ const createCustomIcon = (status: Sentinel["status"], isSelected: boolean = fals
   });
 };
 
-const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, onViewLiveFeed }: MapComponentProps) => {
+const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, onViewLiveFeed, onStopFeed, isStreamActive = false }: MapComponentProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
@@ -131,11 +133,6 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
           icon: createCustomIcon(sentinel.status, isSelected),
         }).addTo(map);
 
-        // Click handler
-        marker.on('click', () => {
-          onSentinelSelect(sentinel);
-        });
-
         markersRef.current.set(sentinel.deviceId, marker);
       }
 
@@ -143,6 +140,9 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
       const statusColor = getMarkerColor(sentinel.status);
       const statusLabel = sentinel.status.charAt(0).toUpperCase() + sentinel.status.slice(1);
       const batteryColor = sentinel.batteryLevel > 50 ? '#22c55e' : sentinel.batteryLevel > 20 ? '#f59e0b' : '#ef4444';
+      
+      // Only show "Stop Video Feed" if this sentinel is selected AND stream is active
+      const showStopButton = isSelected && isStreamActive;
       
       marker.bindPopup(`
         <div style="min-width: 200px; padding: 8px;">
@@ -171,9 +171,10 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
             <button
               type="button"
               class="view-live-feed"
-              style="margin-top: 8px; padding: 6px 12px; background: ${statusColor}; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;"
+              data-device-id="${sentinel.deviceId}"
+              style="margin-top: 8px; padding: 6px 12px; background: ${showStopButton ? '#ef4444' : statusColor}; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;"
             >
-              View Live Feed
+              ${showStopButton ? 'Stop Video Feed' : 'View Live Feed'}
             </button>
           </div>
         </div>
@@ -188,9 +189,11 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
         const button = popupEl?.querySelector<HTMLButtonElement>('button.view-live-feed');
         if (button) {
           button.onclick = () => {
-            if (onViewLiveFeed) {
-              onViewLiveFeed(sentinel);
+            if (showStopButton && onStopFeed) {
+              // Stop the feed
+              onStopFeed(sentinel);
             } else {
+              // Select and start viewing feed
               onSentinelSelect(sentinel);
             }
             map.closePopup();

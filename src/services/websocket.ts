@@ -18,6 +18,11 @@ export interface AlertVerifiedEvent {
   isVerified: boolean;
 }
 
+export interface SentinelStatusUpdateEvent {
+  deviceId: string;
+  status: 'active' | 'inactive' | 'alert';
+}
+
 class WebSocketService {
   private socket: Socket | null = null;
   private reconnectAttempts = 0;
@@ -28,8 +33,14 @@ class WebSocketService {
    */
   connect(): void {
     if (this.socket?.connected) {
-      console.log('WebSocket already connected');
-      return;
+      return; // Silently return if already connected
+    }
+
+    // If socket exists but not connected, clean it up first
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.close();
+      this.socket = null;
     }
 
     console.log('Connecting to WebSocket server:', WS_URL);
@@ -128,6 +139,23 @@ class WebSocketService {
     // Return unsubscribe function
     return () => {
       this.socket?.off('alert-verified', callback);
+    };
+  }
+
+  /**
+   * Subscribe to sentinel status update events
+   */
+  onSentinelStatusUpdate(callback: (data: SentinelStatusUpdateEvent) => void): () => void {
+    if (!this.socket) {
+      console.warn('WebSocket not connected. Call connect() first.');
+      return () => {};
+    }
+
+    this.socket.on('sentinel-status-update', callback);
+
+    // Return unsubscribe function
+    return () => {
+      this.socket?.off('sentinel-status-update', callback);
     };
   }
 

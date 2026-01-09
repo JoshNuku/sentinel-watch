@@ -3,10 +3,12 @@ import { alertAPI, type Alert } from "@/services/api";
 import { wsService } from "@/services/websocket";
 import AlertCard from "./AlertCard";
 import { Bell, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const AlertsList = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verifying, setVerifying] = useState<string | null>(null);
 
   const fetchAlerts = async () => {
     try {
@@ -21,13 +23,41 @@ const AlertsList = () => {
     }
   };
 
+  const handleVerify = async (alertId: string, isVerified: boolean) => {
+    try {
+      setVerifying(alertId);
+      
+      // Optimistic update
+      setAlerts(prev => prev.map(a => 
+        a._id === alertId ? { ...a, isVerified } : a
+      ));
+      
+      await alertAPI.verify(alertId, isVerified);
+      toast.success('Alert verified successfully');
+    } catch (error) {
+      // Revert on error
+      setAlerts(prev => prev.map(a => 
+        a._id === alertId ? { ...a, isVerified: !isVerified } : a
+      ));
+      console.error('Failed to verify alert:', error);
+      toast.error('Failed to verify alert');
+    } finally {
+      setVerifying(null);
+    }
+  };
+
   useEffect(() => {
     fetchAlerts();
 
     // Listen for new alerts via WebSocket
     wsService.connect();
     const unsubscribe = wsService.onNewAlert((data) => {
-      setAlerts(prev => [data.alert, ...prev.slice(0, 9)]);
+      setAlerts(prev => {
+        // Avoid duplicates by checking if alert already exists
+        const exists = prev.some(a => a._id === data.alert._id);
+        if (exists) return prev;
+        return [data.alert, ...prev.slice(0, 9)];
+      });
     });
 
     return () => unsubscribe();
@@ -58,7 +88,12 @@ const AlertsList = () => {
           </div>
         ) : (
           alerts.map((alert) => (
-            <AlertCard key={alert._id} alert={alert} />
+            <AlertCard 
+              key={alert._id} 
+              alert={alert} 
+              onVerify={handleVerify}
+              verifying={verifying === alert._id}
+            />
           ))
         )}
       </div>

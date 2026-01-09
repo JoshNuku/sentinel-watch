@@ -58,6 +58,10 @@ const AlertSchema = new Schema<AlertDocument>(
     isVerified: {
       type: Boolean,
       default: false
+    },
+    imageUrl: {
+      type: String,
+      default: null
     }
   },
   {

@@ -33,11 +33,12 @@ export interface Sentinel {
 export interface Alert {
   _id: string;
   sentinelId: string;
-  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person';
+  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person' | 'person' | 'car' | 'truck' | 'motorcycle' | 'bus';
   confidence: number;
   location: Location;
   timestamp: string;
   isVerified: boolean;
+  imageUrl?: string;  // URL to saved alert image
 }
 
 export interface ApiResponse<T> {
@@ -123,6 +124,73 @@ export const sentinelAPI = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     });
+  },
+
+  /**
+   * Request stream start for a sentinel
+   */
+  requestStream: async (deviceId: string): Promise<ApiResponse<{ message: string }>> => {
+    return fetchAPI<ApiResponse<{ message: string }>>(`/sentinels/${deviceId}/stream/start`, {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Request stream stop for a sentinel
+   */
+  stopStream: async (deviceId: string): Promise<ApiResponse<{ message: string }>> => {
+    return fetchAPI<ApiResponse<{ message: string }>>(`/sentinels/${deviceId}/stream/stop`, {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Activate sentinel (enter INTRUDER mode for AI detection)
+   * Call when user opens live feed
+   */
+  activate: async (deviceId: string): Promise<ApiResponse<{ mode: string; streamUrl: string }>> => {
+    return fetchAPI<ApiResponse<{ mode: string; streamUrl: string }>>(`/sentinels/${deviceId}/activate`, {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Deactivate sentinel (return to SENTRY mode)
+   * Call when user closes live feed
+   */
+  deactivate: async (deviceId: string): Promise<ApiResponse<{ mode: string }>> => {
+    return fetchAPI<ApiResponse<{ mode: string }>>(`/sentinels/${deviceId}/deactivate`, {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Send keep-alive to prevent camera auto-stop
+   * Call every 60 seconds while viewing stream
+   */
+  keepAlive: async (deviceId: string): Promise<ApiResponse<{ message: string }>> => {
+    return fetchAPI<ApiResponse<{ message: string }>>(`/sentinels/${deviceId}/keepalive`, {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Get Pi status directly (mode, camera state, etc.)
+   */
+  getPiStatus: async (deviceId: string): Promise<ApiResponse<{
+    deviceId: string;
+    mode: string;
+    cameraActive: boolean;
+    aiLoaded: boolean;
+    streamIdleSeconds: number;
+  }>> => {
+    return fetchAPI<ApiResponse<{
+      deviceId: string;
+      mode: string;
+      cameraActive: boolean;
+      aiLoaded: boolean;
+      streamIdleSeconds: number;
+    }>>(`/sentinels/${deviceId}/pi-status`);
   },
 };
 

@@ -3,6 +3,8 @@ import { Alert, Sentinel } from '../models';
 import { SentinelStatus } from '../types';
 import { huaweiSMNService } from '../services';
 import { Server as SocketServer } from 'socket.io';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Alert Controller
@@ -38,7 +40,8 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
       threatType,
       confidence,
       location,
-      timestamp
+      timestamp,
+      imageData  // Base64 encoded JPEG from Raspberry Pi
     } = req.body;
 
     // Validation
@@ -91,7 +94,8 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
       confidence,
       location,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      isVerified: false
+      isVerified: false,
+      imageUrl: null  // Will be set after saving image
     });
 
     await alert.save();
@@ -100,11 +104,58 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
     console.log('   Alert ID:', alert._id);
     console.log('   Location:', `${location.lat}, ${location.lng}`);
 
+    // Step 1.5: Save base64 image to disk if provided
+    if (imageData) {
+      try {
+        const uploadsDir = path.join(__dirname, '../../uploads/alerts');
+        // Ensure directory exists
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        const imagePath = path.join(uploadsDir, `${alert._id}.jpg`);
+        const imageBuffer = Buffer.from(imageData, 'base64');
+        fs.writeFileSync(imagePath, imageBuffer);
+        
+        // Update alert with image URL
+        alert.imageUrl = `/uploads/alerts/${alert._id}.jpg`;
+        await alert.save();
+        
+        console.log(`📸 Alert image saved: ${imagePath} (${Math.round(imageBuffer.length / 1024)}KB)`);
+      } catch (imageError) {
+        console.error('❌ Failed to save alert image:', imageError);
+        // Don't fail the request if image save fails
+      }
+    }
+
     // Step 2: Update Sentinel status to 'alert'
     sentinel.status = SentinelStatus.ALERT;
     sentinel.lastSeen = new Date();
     await sentinel.save();
     console.log('✅ Sentinel status updated to:', sentinel.status);
+
+    // Step 2.5: Auto-reset sentinel status after 2 minutes
+    // This prevents the "THREAT DETECTED" indicator from showing indefinitely
+    setTimeout(async () => {
+      try {
+        const updatedSentinel = await Sentinel.findOne({ deviceId: sentinelId.toUpperCase() });
+        if (updatedSentinel && updatedSentinel.status === SentinelStatus.ALERT) {
+          updatedSentinel.status = SentinelStatus.ACTIVE;
+          await updatedSentinel.save();
+          console.log(`⏰ Auto-reset: ${sentinelId} status changed from alert to active`);
+          
+          // Emit status update to connected clients
+          if (io) {
+            io.emit('sentinel-status-update', {
+              deviceId: updatedSentinel.deviceId,
+              status: updatedSentinel.status
+            });
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error auto-resetting sentinel status:', error);
+      }
+    }, 2 * 60 * 1000); // 2 minutes
 
     // Step 3: Emit real-time Socket.io event to connected dashboards
     if (io) {
@@ -324,9 +375,10 @@ export const getAlertStats = async (_req: Request, res: Response): Promise<void>
     const verified = await Alert.countDocuments({ isVerified: true });
     const unverified = await Alert.countDocuments({ isVerified: false });
 
-    // Get alerts from last 24 hours
-    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const recent = await Alert.countDocuments({ timestamp: { $gte: last24Hours } });
+    // Get alerts from today (since midnight local time)
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const recent = await Alert.countDocuments({ timestamp: { $gte: startOfToday } });
 
     // Group by threat type
     const byThreatType = await Alert.aggregate([

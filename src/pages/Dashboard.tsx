@@ -15,6 +15,7 @@ const Dashboard = () => {
   const location = useLocation();
   const [sentinels, setSentinels] = useState<Sentinel[]>([]);
   const [selectedSentinel, setSelectedSentinel] = useState<Sentinel | null>(null);
+  const [isStreamActive, setIsStreamActive] = useState(false);
   const [alertStats, setAlertStats] = useState({
     total: 0,
     last24Hours: 0
@@ -107,15 +108,16 @@ const Dashboard = () => {
         variant: "destructive",
       });
 
-      // Refresh data
+      // Auto-select the sentinel with the alert immediately using fresh data from event
+      // This ensures we have the latest stream URL and status
+      if (data.sentinel) {
+        console.log('📡 Selecting alerted sentinel with fresh data:', data.sentinel.deviceId);
+        setSelectedSentinel(data.sentinel);
+      }
+
+      // Refresh data in background
       fetchSentinels();
       fetchAlertStats();
-
-      // Auto-select the sentinel with the alert
-      const alertedSentinel = sentinels.find(s => s.deviceId === data.alert.sentinelId);
-      if (alertedSentinel) {
-        setSelectedSentinel(alertedSentinel);
-      }
     });
 
     // Subscribe to alert verified events
@@ -128,10 +130,30 @@ const Dashboard = () => {
       fetchAlertStats();
     });
 
+    // Subscribe to sentinel status updates (e.g., auto-reset from alert to active)
+    const unsubscribeStatusUpdate = wsService.onSentinelStatusUpdate((data) => {
+      console.log('🔄 Sentinel status update:', data);
+      
+      // Update the sentinel in the list
+      setSentinels(prev => prev.map(s => 
+        s.deviceId === data.deviceId 
+          ? { ...s, status: data.status }
+          : s
+      ));
+      
+      // Update selected sentinel if it's the one that changed
+      setSelectedSentinel(prev => 
+        prev?.deviceId === data.deviceId
+          ? { ...prev, status: data.status }
+          : prev
+      );
+    });
+
     // Cleanup on unmount
     return () => {
       unsubscribeAlerts();
       unsubscribeVerified();
+      unsubscribeStatusUpdate();
       clearInterval(checkConnection);
     };
   }, [sentinels, toast]);
@@ -173,7 +195,7 @@ const Dashboard = () => {
   }, [selectedSentinel]);
 
   // Calculate stats from fetched data
-  const activeSentinels = sentinels.filter(s => s.status === "active").length;
+  const activeSentinels = sentinels.filter(s => s.status === "active" || s.status === "alert").length;
   const inactiveSentinels = sentinels.filter(s => s.status === "inactive").length;
   const alertingSentinels = sentinels.filter(s => s.status === "alert").length;
 
@@ -247,7 +269,12 @@ const Dashboard = () => {
               sentinels={sentinels}
               selectedSentinel={selectedSentinel}
               onSentinelSelect={setSelectedSentinel}
+              onStopFeed={() => {
+                setSelectedSentinel(null);
+                setIsStreamActive(false);
+              }}
               loading={loading}
+              isStreamActive={isStreamActive}
             />
           </div>
           <div className="flex-1 min-h-[220px]">
@@ -259,7 +286,11 @@ const Dashboard = () => {
         <div className="lg:col-span-2 h-[440px]">
           <LiveFeed 
             sentinel={selectedSentinel}
-            onClose={() => setSelectedSentinel(null)}
+            onClose={() => {
+              setSelectedSentinel(null);
+              setIsStreamActive(false);
+            }}
+            onStreamStateChange={setIsStreamActive}
           />
         </div>
       </div>

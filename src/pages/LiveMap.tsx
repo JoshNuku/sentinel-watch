@@ -93,8 +93,8 @@ const LiveMap = () => {
         <MapComponent 
           sentinels={sentinels} 
           selectedSentinel={selectedSentinel}
-          onSentinelSelect={setSelectedSentinel}
-            onViewLiveFeed={(s) => navigate('/dashboard', { state: { sentinelId: s.deviceId } })}
+          onSentinelSelect={(s) => navigate('/dashboard', { state: { sentinelId: s.deviceId } })}
+          onStopFeed={() => setSelectedSentinel(null)}
           loading={loading}
         />
       </div>

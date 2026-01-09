@@ -17,7 +17,11 @@ import routes from './routes';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import { setSocketIO } from './controllers/alertController';
+import { setSentinelSocketIO } from './controllers/sentinelController';
 import { huaweiSMNService } from './services';
+import { Sentinel } from './models';
+import { SentinelStatus } from './types';
+import path from 'path';
 
 /**
  * PROJECT ORION - Backend Server
@@ -120,6 +124,9 @@ io.on('connection', (socket) => {
 // Inject Socket.io instance into alert controller
 setSocketIO(io);
 
+// Inject Socket.io instance into sentinel controller
+setSentinelSocketIO(io);
+
 // ============================================
 // API ROUTES
 // ============================================
@@ -150,6 +157,55 @@ app.get('/', (_req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api', routes);
+
+// Serve uploaded alert images
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// ============================================
+// BACKGROUND JOBS
+// ============================================
+
+/**
+ * Offline Detection Job
+ * Marks sentinels as inactive if no heartbeat received for 90 seconds
+ * Runs every 30 seconds
+ */
+const startOfflineDetectionJob = () => {
+  setInterval(async () => {
+    try {
+      const threshold = new Date(Date.now() - 90000); // 90 seconds ago
+      
+      const result = await Sentinel.updateMany(
+        { 
+          lastSeen: { $lt: threshold }, 
+          status: { $ne: SentinelStatus.INACTIVE } 
+        },
+        { status: SentinelStatus.INACTIVE }
+      );
+      
+      if (result.modifiedCount > 0) {
+        console.log(`⚠️  Marked ${result.modifiedCount} sentinel(s) as inactive (no heartbeat for 90s)`);
+        
+        // Emit status update to connected dashboards
+        const offlineSentinels = await Sentinel.find({ 
+          lastSeen: { $lt: threshold },
+          status: SentinelStatus.INACTIVE 
+        });
+        
+        offlineSentinels.forEach(sentinel => {
+          io.emit('sentinel-status-update', {
+            deviceId: sentinel.deviceId,
+            status: sentinel.status
+          });
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error in offline detection job:', error);
+    }
+  }, 30000); // Run every 30 seconds
+  
+  console.log('🔄 Offline detection job started (checking every 30s)');
+};
 
 // ============================================
 // ERROR HANDLING
@@ -184,6 +240,9 @@ const startServer = async (): Promise<void> => {
     // Connect to MongoDB
     await connectDatabase();
 
+    // Start background jobs
+    startOfflineDetectionJob();
+
     // Start HTTP server
     httpServer.listen(PORT, () => {
       console.log('\n' + '='.repeat(60));
@@ -202,7 +261,11 @@ const startServer = async (): Promise<void> => {
       console.log('   POST   /api/sentinels/register');
       console.log('   GET    /api/sentinels');
       console.log('   GET    /api/sentinels/:deviceId');
-      console.log('   PATCH  /api/sentinels/:deviceId/status');
+      console.log('   PATCH  /api/sentinels/:deviceId/status (dashboard)');
+      console.log('   PUT    /api/sentinels/:deviceId/status (Pi heartbeat)');
+      console.log('   POST   /api/sentinels/:deviceId/activate');
+      console.log('   POST   /api/sentinels/:deviceId/deactivate');
+      console.log('   POST   /api/sentinels/:deviceId/keepalive');
       console.log('   POST   /api/alerts');
       console.log('   GET    /api/alerts');
       console.log('   GET    /api/alerts/stats');

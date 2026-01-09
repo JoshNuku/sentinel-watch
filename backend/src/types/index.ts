@@ -38,4 +38,5 @@ export interface IAlert {
   location: Location;
   timestamp: Date;
   isVerified: boolean;
+  imageUrl?: string;
 }

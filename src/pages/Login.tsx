@@ -111,11 +111,11 @@ const Login: React.FC = () => {
               </Button>
             </form>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-2">
+          {/* <CardFooter className="flex flex-col space-y-2">
             <p className="text-xs text-muted-foreground text-center">
               Demo: admin@orion.gh / password
             </p>
-          </CardFooter>
+          </CardFooter> */}
         </Card>
 
         <p className="text-center text-xs text-blue-200 mt-6">
