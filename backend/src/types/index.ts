@@ -18,7 +18,29 @@ export enum ThreatType {
   CAR = 'car',
   TRUCK = 'truck',
   MOTORCYCLE = 'motorcycle',
-  BUS = 'bus'
+  BUS = 'bus',
+  ANIMAL = 'animal',
+  UNKNOWN = 'unknown'
+}
+
+export enum TriggerType {
+  // AI/Camera triggers
+  AI = 'ai',
+  CAMERA = 'camera',
+  // Sensor triggers
+  PIR = 'pir',
+  VIBRATION = 'vibration',
+  MOTION = 'motion',
+  INFRARED = 'infrared',
+  PRESSURE = 'pressure',
+  LASER = 'laser',
+  // Audio triggers
+  MICROPHONE = 'microphone',
+  SOUND = 'sound',
+  // Other triggers
+  REMOTE = 'remote',
+  MANUAL = 'manual',
+  GPIO = 'gpio'  // Generic GPIO (fallback)
 }
 
 export interface ISentinel {
@@ -29,6 +51,7 @@ export interface ISentinel {
   lastSeen: Date;
   ipAddress?: string;
   streamUrl?: string;
+  triggerType?: TriggerType;
 }
 
 export interface IAlert {
@@ -39,4 +62,6 @@ export interface IAlert {
   timestamp: Date;
   isVerified: boolean;
   imageUrl?: string;
+  triggerType?: TriggerType;
+  triggeredSensors?: string[]; // e.g. ['PIR','VIBRATION','SOUND'] or gpio pins
 }

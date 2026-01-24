@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { IAlert, ThreatType, Location } from '../types';
+import { IAlert, ThreatType, TriggerType, Location } from '../types';
 
-export interface AlertDocument extends IAlert, Document {}
+export interface AlertDocument extends IAlert, Document { }
 
 const LocationSchema = new Schema<Location>(
   {
@@ -40,7 +40,7 @@ const AlertSchema = new Schema<AlertDocument>(
       min: 0,
       max: 1,
       validate: {
-        validator: function(v: number) {
+        validator: function (v: number) {
           return v >= 0 && v <= 1;
         },
         message: 'Confidence must be between 0 and 1'
@@ -63,6 +63,16 @@ const AlertSchema = new Schema<AlertDocument>(
       type: String,
       default: null
     }
+    ,
+    triggerType: {
+      type: String,
+      trim: true,
+      enum: Object.values(TriggerType)
+    },
+    triggeredSensors: {
+      type: [String],
+      default: []
+    }
   },
   {
     timestamps: true,
@@ -82,12 +92,12 @@ AlertSchema.index({ confidence: -1 });
 AlertSchema.index({ sentinelId: 1, timestamp: -1 });
 
 // Virtual to get confidence percentage
-AlertSchema.virtual('confidencePercent').get(function() {
+AlertSchema.virtual('confidencePercent').get(function () {
   return Math.round(this.confidence * 100);
 });
 
 // Virtual to check if alert is recent (last hour)
-AlertSchema.virtual('isRecent').get(function() {
+AlertSchema.virtual('isRecent').get(function () {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
   return this.timestamp > oneHourAgo;
 });

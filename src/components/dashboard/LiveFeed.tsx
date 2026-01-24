@@ -1,18 +1,21 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Video, Signal, WifiOff, X, AlertCircle, Moon, Camera, Maximize, RefreshCw, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getStreamUrl, sentinelAPI, type Sentinel } from "@/services/api";
+import { getStreamUrl, sentinelAPI, alertAPI, type Sentinel } from "@/services/api";
+import { wsService } from "@/services/websocket";
 
 interface LiveFeedProps {
   sentinel: Sentinel | null;
   onClose?: () => void;
   onStreamStateChange?: (isActive: boolean) => void;
+  externalManualRequest?: boolean;
 }
 
 // Keep-alive interval (60 seconds as per Pi documentation)
 const KEEPALIVE_INTERVAL = 60000;
 
-const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => {
+const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualRequest }: LiveFeedProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [imageError, setImageError] = useState(false);
@@ -21,12 +24,19 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
   const [retryCount, setRetryCount] = useState(0);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [manualStreamRequested, setManualStreamRequested] = useState(false);
+  const isManualRequested = externalManualRequest ?? manualStreamRequested;
   const [isActivating, setIsActivating] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
+  const [showThreatOverlay, setShowThreatOverlay] = useState(false);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const activatedSentinelRef = useRef<string | null>(null);
+  // track user-stopped sentinel to avoid auto-reactivation
+  const userStoppedDeviceRef = useRef<string | null>(null);
+  // throttle stream requests
+  const lastStreamRequestRef = useRef<number>(0);
+  const navigate = useNavigate();
 
   // Toggle fullscreen
   const handleFullscreen = () => {
@@ -63,9 +73,9 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
     if (keepAliveIntervalRef.current) {
       clearInterval(keepAliveIntervalRef.current);
     }
-    
+
     console.log(`💓 Starting keep-alive for ${deviceId} (every ${KEEPALIVE_INTERVAL / 1000}s)`);
-    
+
     keepAliveIntervalRef.current = setInterval(async () => {
       try {
         await sentinelAPI.keepAlive(deviceId);
@@ -89,7 +99,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
   const activateSentinel = useCallback(async (deviceId: string): Promise<boolean> => {
     console.log(`🟢 Activating sentinel ${deviceId}...`);
     setIsActivating(true);
-    
+
     try {
       const response = await sentinelAPI.activate(deviceId);
       if (response.success) {
@@ -112,7 +122,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
     console.log(`🔴 Deactivating sentinel ${deviceId}...`);
     setIsDeactivating(true);
     stopKeepAlive();
-    
+
     try {
       await sentinelAPI.deactivate(deviceId);
       console.log(`✅ Sentinel ${deviceId} deactivated`);
@@ -141,14 +151,14 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
       setImageError(false);
       setImageLoaded(false);
       setRetryCount(prev => prev + 1);
-      
+
       // Force URL refresh by appending timestamp
       const url = getStreamUrl(sentinel);
       if (url) {
         const separator = url.includes('?') ? '&' : '?';
         setStreamUrl(`${url}${separator}_t=${Date.now()}`);
       }
-      
+
       setIsReconnecting(false);
     }, delay);
   };
@@ -160,7 +170,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
     setImageError(false);
     setImageLoaded(false);
     setIsReconnecting(false);
-    
+
     if (sentinel) {
       const url = getStreamUrl(sentinel);
       if (url) {
@@ -173,28 +183,63 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
   // Request stream for inactive sentinel
   const handleRequestStream = async () => {
     if (!sentinel) return;
-    
-    console.log('📹 Manual stream request for inactive sentinel');
+
+    // Throttle: don't request if we already did within 5 seconds
+    const now = Date.now();
+    if (now - lastStreamRequestRef.current < 5000) {
+      console.log('🔄 Skipping duplicate manual stream request (throttled)');
+      return;
+    }
+    lastStreamRequestRef.current = now;
+
+    console.log('📹 Manual stream request for sentinel', sentinel.deviceId);
     setManualStreamRequested(true);
     setImageError(false);
     setImageLoaded(false);
     setRetryCount(0);
-    
+
+    // Clear any user-stop flag since user explicitly requested
+    if (userStoppedDeviceRef.current === sentinel.deviceId) userStoppedDeviceRef.current = null;
+
     try {
-      // Activate the sentinel first (this turns on camera + AI)
-      const activated = await activateSentinel(sentinel.deviceId);
-      
-      if (activated) {
-        // Set stream URL after activation
-        const url = getStreamUrl(sentinel);
-        if (url) {
-          const separator = url.includes('?') ? '&' : '?';
-          setStreamUrl(`${url}${separator}_t=${Date.now()}`);
-        }
-      } else {
-        console.error('❌ Failed to activate sentinel');
+      // Ask backend to request the stream from the device (backend will call the Pi)
+      const res = await sentinelAPI.requestStream(sentinel.deviceId);
+
+      if (res && res.success && res.data?.streamUrl) {
+        // Backend returned a stream URL immediately
+        const proxied = res.data.streamUrl.includes('ngrok') ? `${getStreamUrl({ ...sentinel, streamUrl: res.data.streamUrl } as Sentinel)}` : res.data.streamUrl;
+        setStreamUrl(proxied);
+        activatedSentinelRef.current = sentinel.deviceId;
+        startKeepAlive(sentinel.deviceId);
         setManualStreamRequested(false);
+        return;
       }
+
+      // Otherwise poll the sentinel record until streamUrl appears (reduce polling)
+      const start = Date.now();
+      const timeout = 20000; // 20s max (reduced from 30s)
+      const pollInterval = 5000; // 5 seconds (increased from 2s)
+
+      while (Date.now() - start < timeout) {
+        await new Promise((r) => setTimeout(r, pollInterval));
+        try {
+          const sresp = await sentinelAPI.getById(sentinel.deviceId);
+          if (sresp && sresp.success && sresp.data?.streamUrl) {
+            const url = sresp.data.streamUrl as string;
+            const proxied = url.includes('ngrok') ? `${getStreamUrl({ ...sentinel, streamUrl: url } as Sentinel)}` : url;
+            setStreamUrl(proxied);
+            activatedSentinelRef.current = sentinel.deviceId;
+            startKeepAlive(sentinel.deviceId);
+            setManualStreamRequested(false);
+            return;
+          }
+        } catch (err) {
+          console.warn('Polling sentinel for streamUrl failed', err);
+        }
+      }
+
+      console.error('Timed out waiting for streamUrl from sentinel');
+      setManualStreamRequested(false);
     } catch (error) {
       console.error('❌ Failed to request stream:', error);
       setManualStreamRequested(false);
@@ -204,17 +249,18 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
   // Stop manually requested stream
   const handleStopStream = async () => {
     console.log('🛑 Stopping stream');
-    
+
     if (sentinel && activatedSentinelRef.current === sentinel.deviceId) {
       await deactivateSentinel(sentinel.deviceId);
     }
-    
+
     setManualStreamRequested(false);
     setStreamUrl(null);
     setImageError(false);
     setImageLoaded(false);
     cleanupTimers();
-    
+    // mark that user intentionally stopped this sentinel to avoid auto-restart
+    if (sentinel) userStoppedDeviceRef.current = sentinel.deviceId;
     // Notify parent that stream is inactive
     if (onStreamStateChange) {
       onStreamStateChange(false);
@@ -224,18 +270,18 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
   // Take snapshot of current stream
   const handleSnapshot = () => {
     if (!imgRef.current || !sentinel) return;
-    
+
     try {
       // Create a canvas to capture the current frame
       const canvas = document.createElement('canvas');
       const img = imgRef.current;
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
-      
+
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(img, 0, 0);
-        
+
         // Convert to blob and download
         canvas.toBlob((blob) => {
           if (blob) {
@@ -254,66 +300,128 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
     }
   };
 
-  // Update stream URL when sentinel changes
+  // Update stream URL when sentinel changes (but preserve stream on status changes)
   useEffect(() => {
-    // Cleanup previous sentinel's resources
     const previousSentinel = activatedSentinelRef.current;
-    cleanupTimers();
-    setImageError(false);
-    setImageLoaded(false);
-    setRetryCount(0);
-    setIsReconnecting(false);
-    setManualStreamRequested(false);
-    
-    // Notify parent that stream is inactive during transition
-    if (onStreamStateChange) {
-      onStreamStateChange(false);
-    }
-    
-    // If we had a previous sentinel activated, deactivate it
-    if (previousSentinel && (!sentinel || previousSentinel !== sentinel.deviceId)) {
-      console.log(`🔄 Sentinel changed, deactivating previous: ${previousSentinel}`);
-      deactivateSentinel(previousSentinel);
-    }
-    
-    if (sentinel) {
-      // Only auto-start stream if sentinel is active or alert status
-      // Inactive sentinels require manual request
-      const shouldAutoStream = sentinel.status === 'active' || sentinel.status === 'alert';
-      
-      if (shouldAutoStream) {
-        // Activate the sentinel and start streaming
-        (async () => {
-          const activated = await activateSentinel(sentinel.deviceId);
-          
-          if (activated) {
-            const url = getStreamUrl(sentinel);
-            setStreamUrl(url);
+    const previousDeviceId = previousSentinel;
+    const currentDeviceId = sentinel?.deviceId;
 
-            // Set up periodic refresh every 30 seconds to keep connection alive
-            refreshIntervalRef.current = setInterval(() => {
-              if (!imageError && (sentinel.status === 'active' || sentinel.status === 'alert')) {
-                const refreshUrl = getStreamUrl(sentinel);
-                if (refreshUrl) {
-                  const separator = refreshUrl.includes('?') ? '&' : '?';
-                  setStreamUrl(`${refreshUrl}${separator}_t=${Date.now()}`);
-                  console.log('🔄 Periodic stream refresh');
-                }
-              }
-            }, 30000);
-          }
-        })();
-      } else {
-        setStreamUrl(null);
+    // Only reset if the DEVICE changed, not just the status
+    if (previousDeviceId !== currentDeviceId) {
+      cleanupTimers();
+      setImageError(false);
+      setImageLoaded(false);
+      setRetryCount(0);
+      setIsReconnecting(false);
+      setManualStreamRequested(false);
+
+      // Notify parent that stream is inactive during transition
+      if (onStreamStateChange) {
+        onStreamStateChange(false);
       }
-    } else {
+
+      // If we had a previous sentinel activated, deactivate it
+      if (previousSentinel && (!sentinel || previousSentinel !== sentinel.deviceId)) {
+        console.log(`🔄 Sentinel changed, deactivating previous: ${previousSentinel}`);
+        deactivateSentinel(previousSentinel);
+      }
+
+      // Clear existing stream URL when device changes
       setStreamUrl(null);
     }
+    // If sentinel status changes to 'alert' and stream is not active, we preserve state (don't clear)
+    // The socket event handler will auto-start the stream
 
     return () => {
       cleanupTimers();
     };
-  }, [sentinel?.deviceId, sentinel?.status, activateSentinel, deactivateSentinel, cleanupTimers, onStreamStateChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentinel?.deviceId]); // Only trigger on deviceId change, not status
+
+  // Auto-start stream when threat is detected for this sentinel
+  useEffect(() => {
+    if (!sentinel) return;
+
+    const unsubscribe = wsService.onNewAlert((data) => {
+      // Check if this alert is for the currently selected sentinel
+      if (data.sentinel.deviceId === sentinel.deviceId) {
+        // Skip if stream is already active (don't interrupt existing stream)
+        if (streamUrl && !imageError) {
+          console.log('📹 Stream already active, just showing threat overlay');
+          setShowThreatOverlay(true);
+          return;
+        }
+
+        // Throttle: don't request stream if we already did within 5 seconds
+        const now = Date.now();
+        if (now - lastStreamRequestRef.current < 5000) {
+          console.log('🔄 Skipping duplicate stream request (throttled)');
+          return;
+        }
+        lastStreamRequestRef.current = now;
+
+        console.log(`🚨 Auto-starting stream for ${sentinel.deviceId} due to threat detection`);
+
+        // Clear any user-stopped flag since there's immediate threat
+        userStoppedDeviceRef.current = null;
+
+        // Auto-request the stream
+        setManualStreamRequested(true);
+        setImageError(false);
+        setImageLoaded(false);
+        setRetryCount(0);
+        setShowThreatOverlay(true);
+
+        // Request stream from backend
+        sentinelAPI.requestStream(sentinel.deviceId).then((res) => {
+          if (res && res.success && res.data?.streamUrl) {
+            const url = res.data.streamUrl;
+            const proxied = url.includes('ngrok')
+              ? getStreamUrl({ ...sentinel, streamUrl: url })
+              : url;
+            if (proxied) {
+              setStreamUrl(proxied);
+              activatedSentinelRef.current = sentinel.deviceId;
+              startKeepAlive(sentinel.deviceId);
+            }
+          } else if (sentinel.streamUrl) {
+            // Use existing streamUrl if backend doesn't return new one
+            const proxied = sentinel.streamUrl.includes('ngrok')
+              ? getStreamUrl(sentinel)
+              : sentinel.streamUrl;
+            if (proxied) {
+              setStreamUrl(proxied);
+              activatedSentinelRef.current = sentinel.deviceId;
+              startKeepAlive(sentinel.deviceId);
+            }
+          }
+        }).catch((err) => {
+          console.error('Failed to auto-start stream on threat:', err);
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentinel?.deviceId]); // Only re-subscribe when deviceId changes
+
+  // Auto-clear threat overlay after 30 seconds
+  useEffect(() => {
+    if (!showThreatOverlay) return;
+
+    const timer = setTimeout(() => {
+      setShowThreatOverlay(false);
+    }, 30000); // Clear after 30 seconds
+
+    return () => clearTimeout(timer);
+  }, [showThreatOverlay]);
+
+  // Reset threat overlay when sentinel changes
+  useEffect(() => {
+    setShowThreatOverlay(false);
+  }, [sentinel?.deviceId]);
 
   // Cleanup on unmount - deactivate sentinel
   useEffect(() => {
@@ -332,19 +440,19 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
     console.error(`❌ Stream error for ${sentinel?.deviceId}`);
     setImageError(true);
     setImageLoaded(false);
-    
+
     // Notify parent that stream is inactive
     if (onStreamStateChange) {
       onStreamStateChange(false);
     }
-    
+
     // Don't auto-retry for inactive sentinels unless manually requested
-    if (sentinel?.status === 'inactive' && !manualStreamRequested) {
+    if (sentinel?.status === 'inactive' && !isManualRequested) {
       console.log('Stream ended for inactive sentinel (expected behavior)');
       setStreamUrl(null);
       return;
     }
-    
+
     // Automatically attempt to reconnect (max 10 attempts)
     if (retryCount < 10) {
       attemptReconnect();
@@ -361,7 +469,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
     setImageError(false);
     setRetryCount(0); // Reset retry count on successful connection
     setIsReconnecting(false);
-    
+
     // Notify parent that stream is active
     if (onStreamStateChange) {
       onStreamStateChange(true);
@@ -393,113 +501,90 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
     // Case 2: Sentinel is inactive (sleeping/low-power mode) and no manual stream requested
     if (sentinel.status === 'inactive' && !streamUrl) {
       return (
-        <div className="flex-1 min-h-0 bg-background rounded-lg relative overflow-hidden flex flex-col items-center justify-center border border-border/50">
-          <div className="absolute inset-0 bg-gradient-to-br from-secondary/30 to-background" />
-          
-          {/* Animated background pulse */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-32 h-32 rounded-full bg-primary/5 animate-pulse" />
-          </div>
-          
-          <div className="relative z-10 text-center space-y-4 px-6">
-            <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mx-auto">
-              <Moon className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-lg mb-2">Device in Low-Power Mode</h4>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                {sentinel.deviceId} is conserving power. Camera activates on threat detection.
-              </p>
-              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <div className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse" />
-                <span>Standby Mode</span>
+        <div className="flex-1 min-h-0 flex items-center justify-center">
+          <div className="w-full max-w-lg bg-background/60 border border-border/50 rounded-xl p-6 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-14 h-14 rounded-full bg-muted/10 flex items-center justify-center">
+                <Moon className="h-7 w-7 text-muted-foreground" />
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mt-4 gap-2"
-                onClick={handleRequestStream}
-                disabled={isActivating}
-              >
-                {isActivating ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Activating...
-                  </>
-                ) : (
-                  <>
-                    <Camera className="h-4 w-4" />
-                    Request Live Feed
-                  </>
-                )}
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2">
-                Manually activate camera to see current view
-              </p>
+              <div className="flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-semibold text-lg">{sentinel.deviceId}</h4>
+                    <p className="text-sm text-muted-foreground">Device in low-power mode</p>
+                  </div>
+                  <div className="text-sm">
+                    <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/10 text-xs text-muted-foreground">
+                      <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+                      Standby
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-3 text-sm text-muted-foreground">Camera will activate automatically on threat detection. You can request the live feed manually.</p>
+
+                <div className="mt-4 flex items-center gap-3">
+                  <Button
+                    onClick={handleRequestStream}
+                    disabled={isActivating}
+                    className="flex items-center gap-2"
+                  >
+                    {isActivating ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Activating...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-4 w-4" />
+                        Request Live Feed
+                      </>
+                    )}
+                  </Button>
+                  <Button variant="ghost" onClick={() => navigate('/dashboard/settings')}>Help</Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       );
     }
 
-    // Case 3: Stream connection lost
-    if (imageError || !streamUrl) {
+    // Case 3: Stream connection lost — show subtle non-blocking status with actions
+    // NOTE: if the user manually requested a stream (`manualStreamRequested`),
+    // show the large active stream container (loading state) instead of the small card.
+    if (imageError || (!streamUrl && !isManualRequested)) {
       return (
-        <div className="flex-1 min-h-0 bg-background rounded-lg relative overflow-hidden flex flex-col items-center justify-center border border-destructive/30">
-          <div className="absolute inset-0 bg-gradient-to-br from-destructive/10 to-background" />
-          <div className="relative z-10 text-center space-y-4 px-6">
-            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
-              {isReconnecting ? (
-                <RefreshCw className="h-8 w-8 text-primary animate-spin" />
-              ) : (
-                <WifiOff className="h-8 w-8 text-destructive" />
-              )}
-            </div>
-            <div>
-              <h4 className="font-semibold text-lg mb-2">
-                {isReconnecting ? 'Reconnecting...' : 'Connection Lost'}
-              </h4>
-              <p className="text-sm text-muted-foreground max-w-sm">
+        <div className="flex-1 min-h-0 bg-background rounded-lg relative overflow-hidden border border-destructive/30">
+          {/* subtle background to avoid full-screen takeover */}
+          <div className="absolute inset-0 bg-background/60" />
+
+          <div className="relative z-10 w-full h-full flex items-center justify-center p-6">
+            <div className="w-full max-w-lg bg-background/80 border border-border rounded-xl p-8 flex flex-col items-center gap-6 text-center">
+              <div className="flex-shrink-0 w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center">
                 {isReconnecting ? (
-                  <>Attempting to reconnect to {sentinel.deviceId} (attempt {retryCount + 1}/10)</>
+                  <RefreshCw className="h-10 w-10 text-primary animate-spin" />
                 ) : (
-                  <>Unable to connect to video stream from {sentinel.deviceId}</>
+                  <WifiOff className="h-10 w-10 text-destructive" />
                 )}
-              </p>
-              {!streamUrl && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  No stream URL available
-                </p>
-              )}
-              {retryCount >= 10 && (
-                <p className="text-xs text-warning mt-2">
-                  Max reconnection attempts reached
-                </p>
-              )}
-              <div className="flex gap-2 mt-4 justify-center">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="gap-2"
-                  onClick={handleManualReconnect}
-                  disabled={isReconnecting}
-                >
-                  <RefreshCw className={`h-4 w-4 ${isReconnecting ? 'animate-spin' : ''}`} />
-                  {isReconnecting ? 'Reconnecting...' : 'Retry Connection'}
+              </div>
+              <div className="space-y-2">
+                <div className="font-semibold text-xl">{isReconnecting ? 'Reconnecting...' : 'Connection Lost'}</div>
+                <div className="text-sm text-muted-foreground">{isReconnecting ? `Attempting to reconnect (attempt ${retryCount + 1}/10)` : `Unable to connect to ${sentinel.deviceId}`}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="lg" onClick={handleManualReconnect} disabled={isReconnecting}>
+                  {isReconnecting ? 'Reconnecting...' : 'Retry'}
                 </Button>
                 {sentinel.status !== 'inactive' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="gap-2"
-                    onClick={handleRequestStream}
-                    disabled={isReconnecting}
-                  >
-                    <Camera className="h-4 w-4" />
+                  <Button size="lg" onClick={handleRequestStream} disabled={isReconnecting}>
                     Request Feed
                   </Button>
                 )}
               </div>
+              {retryCount >= 10 && (
+                <div className="text-sm text-warning">Max reconnection attempts reached</div>
+              )}
             </div>
           </div>
         </div>
@@ -518,19 +603,18 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
             </div>
           </div>
         )}
-        
+
         {/* Video Stream */}
         <img
           ref={imgRef}
           src={streamUrl}
           alt={`Live feed from ${sentinel.deviceId}`}
-          className={`w-full h-full object-cover transition-opacity duration-300 ${
-            imageLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
           onError={handleImageError}
           onLoad={handleImageLoad}
         />
-        
+
         {/* Stream overlays */}
         <div className="absolute inset-0 pointer-events-none">
           {/* Corner decorations */}
@@ -538,43 +622,19 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
           <div className="absolute top-3 right-3 w-6 h-6 border-r-2 border-t-2 border-primary/50 rounded-tr" />
           <div className="absolute bottom-3 left-3 w-6 h-6 border-l-2 border-b-2 border-primary/50 rounded-bl" />
           <div className="absolute bottom-3 right-3 w-6 h-6 border-r-2 border-b-2 border-primary/50 rounded-br" />
-          
-          {/* Scan lines effect */}
-          <div 
-            className="absolute inset-0 opacity-5"
-            style={{
-              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, hsl(var(--foreground) / 0.05) 2px, hsl(var(--foreground) / 0.05) 4px)',
-            }}
-          />
-          
-          {/* Timestamp */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 glass px-3 py-1 rounded text-xs font-mono backdrop-blur-md">
-            {new Date().toLocaleTimeString()}
-          </div>
-          
-          {/* Alert indicator */}
-          {sentinel.status === 'alert' && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-warning/90 text-warning-foreground px-3 py-1.5 rounded-full animate-pulse">
-              <AlertCircle className="h-4 w-4" />
-              <span className="text-xs font-bold">THREAT DETECTED</span>
+
+          {/* Scan lines effect (decorative) */}
+          <div className="absolute inset-0 opacity-5 pointer-events-none" />
+          {/* Threat overlay */}
+          {showThreatOverlay && (
+            <div className="absolute inset-0 flex items-start justify-center pointer-events-none z-20">
+              <div className="mt-6 bg-destructive/80 text-white px-3 py-1 rounded-md font-bold">THREAT DETECTED</div>
             </div>
           )}
-        </div>
-      </div>
-    );
-  };
 
-  return (
-    <div className="glass rounded-xl p-4 h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <Video className="h-5 w-5 text-primary" />
-          <div>
-            <h3 className="font-semibold">
-              {sentinel ? `Live Feed: ${sentinel.deviceId}` : 'Live Feed'}
-            </h3>
-            {sentinel && (
+          {/* Small info panel */}
+          {sentinel && (
+            <div className="absolute bottom-3 left-3 z-20 bg-background/80 text-xs p-2 rounded-md border border-border/40">
               <div className="text-xs text-muted-foreground space-y-0.5">
                 <p>Battery: {sentinel.batteryLevel}%</p>
                 <p>Status: {sentinel.status}</p>
@@ -583,46 +643,54 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
                 </p>
                 <p>Last seen: {sentinel.lastSeen ? new Date(sentinel.lastSeen).toLocaleString() : 'Unknown'}</p>
               </div>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+            </div>
+          )}
+
+          {/* LIVE indicator - top right */}
           {sentinel && streamUrl && !imageError && (
-            <>
+            <div className="absolute top-3 right-12 z-20 flex items-center gap-2 bg-background/80 px-2 py-1 rounded-md">
               <Signal className="h-4 w-4 text-primary animate-pulse" />
               <span className="text-xs text-primary font-medium">LIVE</span>
-            </>
+            </div>
           )}
-          {sentinel && onClose && (
+        </div>
+
+        {/* Close button - pointer events enabled */}
+        {sentinel && onClose && (
+          <div className="absolute top-3 right-3 z-30">
             <Button
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-8 w-8 p-0 ml-2"
+              className="h-8 w-8 p-0 bg-background/50 hover:bg-background/80"
             >
               <X className="h-4 w-4" />
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-      
-      {/* Content Area */}
+
+    );
+  };
+
+  return (
+    <div className="flex flex-col h-full">
       {renderContent()}
-      
+
       {/* Action Buttons */}
-      {sentinel && streamUrl && !imageError && (
+      {sentinel && (streamUrl || isManualRequested) && !imageError && (
         <div className="flex gap-2 mt-4">
-          <Button 
-            variant="secondary" 
-            size="sm" 
+          <Button
+            variant="secondary"
+            size="sm"
             className="flex-1"
             onClick={handleSnapshot}
           >
             Snapshot
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="flex-1 gap-2"
             onClick={handleStopStream}
             disabled={isDeactivating}
@@ -630,9 +698,9 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange }: LiveFeedProps) => 
             <Power className="h-4 w-4" />
             {isDeactivating ? 'Stopping...' : 'Stop Feed'}
           </Button>
-          <Button 
-            variant="glow" 
-            size="sm" 
+          <Button
+            variant="glow"
+            size="sm"
             className="flex-1"
             onClick={handleFullscreen}
           >

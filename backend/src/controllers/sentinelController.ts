@@ -28,7 +28,8 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
       batteryLevel,
       ipAddress,
       status,
-      streamUrl
+      streamUrl,
+      triggerType
     } = req.body;
 
     // Validation
@@ -59,6 +60,7 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
       sentinel.ipAddress = ipAddress ?? sentinel.ipAddress;
       sentinel.status = status ?? SentinelStatus.ACTIVE;
       sentinel.streamUrl = streamUrl ?? sentinel.streamUrl;
+      sentinel.triggerType = triggerType ?? sentinel.triggerType;
 
       await sentinel.save();
 
@@ -78,7 +80,8 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
         lastSeen: new Date(),
         ipAddress,
         status: status ?? SentinelStatus.ACTIVE,
-        streamUrl
+        streamUrl,
+        triggerType
       });
 
       await sentinel.save();
@@ -177,7 +180,7 @@ export const getSentinelById = async (req: Request, res: Response): Promise<void
 export const updateSentinelStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { deviceId } = req.params;
-    const { status, location, batteryLevel } = req.body;
+    const { status, location, batteryLevel, triggerType } = req.body;
 
     // Build update object
     const updateData: any = { lastSeen: new Date() };
@@ -199,6 +202,9 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
     
     if (batteryLevel !== undefined) {
       updateData.batteryLevel = batteryLevel;
+    }
+    if (triggerType) {
+      updateData.triggerType = triggerType;
     }
 
     const sentinel = await Sentinel.findOneAndUpdate(
@@ -222,6 +228,7 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
       io.emit('sentinel-status-update', {
         deviceId: sentinel.deviceId,
         status: sentinel.status
+        , triggerType: sentinel.triggerType
       });
     }
 
@@ -249,7 +256,7 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
 export const updateSentinelStatusPut = async (req: Request, res: Response): Promise<void> => {
   try {
     const { deviceId } = req.params;
-    const { status, location, batteryLevel } = req.body;
+    const { status, location, batteryLevel, triggerType } = req.body;
 
     const updateData: any = { lastSeen: new Date() };
     
@@ -263,6 +270,9 @@ export const updateSentinelStatusPut = async (req: Request, res: Response): Prom
     
     if (batteryLevel !== undefined) {
       updateData.batteryLevel = batteryLevel;
+    }
+    if (triggerType) {
+      updateData.triggerType = triggerType;
     }
 
     const sentinel = await Sentinel.findOneAndUpdate(
@@ -288,6 +298,7 @@ export const updateSentinelStatusPut = async (req: Request, res: Response): Prom
         status: sentinel.status,
         batteryLevel: sentinel.batteryLevel,
         location: sentinel.location
+        , triggerType: sentinel.triggerType
       });
     }
 
@@ -637,21 +648,68 @@ export const requestStreamStart = async (req: Request, res: Response): Promise<v
 
     console.log(`\ud83d\udcf9 Stream start requested for ${deviceId}`);
 
-    // Note: In a real implementation, this would send a command to the Raspberry Pi
-    // via WebSocket, MQTT, or HTTP callback to start the camera stream
-    // For now, we just log the request
+    // Determine base URL for control endpoints
+    let baseUrl: string | null = null;
+    if (sentinel.streamUrl) {
+      baseUrl = sentinel.streamUrl.replace('/stream', '');
+    } else if (sentinel.ipAddress) {
+      // Fallback to local IP/port convention if available
+      baseUrl = `http://${sentinel.ipAddress}:3000`;
+    }
 
-    res.status(200).json({
-      success: true,
-      message: `Stream start request sent to ${deviceId}`,
-      data: {
-        deviceId: sentinel.deviceId,
-        streamUrl: sentinel.streamUrl
+    if (!baseUrl) {
+      res.status(400).json({
+        success: false,
+        message: 'No known endpoint for sentinel to request stream from'
+      });
+      return;
+    }
+
+    // Fire request to Pi to create a public stream (if supported)
+    try {
+      await fetch(`${baseUrl}/control/request_stream`, {
+        method: 'POST',
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+    } catch (fetchErr) {
+      // Log but continue to poll the DB for streamUrl — some Pi implementations
+      // may return before the HTTP call completes or the tunnel is created.
+      console.warn(`\u26A0 Failed to call Pi request_stream for ${deviceId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
+    }
+
+    // Poll the database for sentinel.streamUrl to appear
+    const timeoutMs = 30000; // 30s
+    const pollInterval = 2000; // 2s
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const current = await Sentinel.findOne({ deviceId: deviceId.toUpperCase() });
+      if (current && current.streamUrl) {
+        res.status(200).json({
+          success: true,
+          message: 'Stream URL available',
+          data: {
+            deviceId: current.deviceId,
+            streamUrl: current.streamUrl
+          }
+        });
+        return;
       }
+      // wait
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+
+    // If we reach here, timed out
+    res.status(504).json({
+      success: false,
+      message: 'Timed out waiting for sentinel to create stream URL'
     });
   } catch (error) {
     console.error('❌ Error requesting stream start:', error);
-    
+
     res.status(500).json({
       success: false,
       message: 'Failed to request stream start',
@@ -659,6 +717,7 @@ export const requestStreamStart = async (req: Request, res: Response): Promise<v
     });
   }
 };
+
 
 /**
  * POST /api/sentinels/:deviceId/stream/stop

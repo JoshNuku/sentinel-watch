@@ -14,6 +14,11 @@ const getAuthHeaders = (): HeadersInit => {
   };
 };
 
+// Simple client-side cache + inflight dedupe to avoid spamming backend
+const _inflightRequests = new Map<string, Promise<any>>();
+const _responseCache: Record<string, { ts: number; data: any }> = {};
+const CACHE_TTL = 5000; // ms
+
 export interface Location {
   lat: number;
   lng: number;
@@ -28,17 +33,21 @@ export interface Sentinel {
   lastSeen: string;
   ipAddress?: string;
   streamUrl?: string; // Direct video stream URL
+  triggerType?: 'ai' | 'camera' | 'pir' | 'vibration' | 'motion' | 'infrared' | 'pressure' | 'laser' | 'microphone' | 'sound' | 'remote' | 'manual' | 'gpio';
+  triggeredSensors?: string[];
 }
 
 export interface Alert {
   _id: string;
   sentinelId: string;
-  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person' | 'person' | 'car' | 'truck' | 'motorcycle' | 'bus';
+  threatType: 'person' | 'car' | 'truck' | 'motorcycle' | 'bus' | 'animal' | 'unknown';
   confidence: number;
   location: Location;
   timestamp: string;
   isVerified: boolean;
   imageUrl?: string;  // URL to saved alert image
+  triggerType?: 'ai' | 'camera' | 'pir' | 'vibration' | 'motion' | 'infrared' | 'pressure' | 'laser' | 'microphone' | 'sound' | 'remote' | 'manual' | 'gpio';
+  triggeredSensors?: string[];
 }
 
 export interface ApiResponse<T> {
@@ -129,10 +138,21 @@ export const sentinelAPI = {
   /**
    * Request stream start for a sentinel
    */
-  requestStream: async (deviceId: string): Promise<ApiResponse<{ message: string }>> => {
-    return fetchAPI<ApiResponse<{ message: string }>>(`/sentinels/${deviceId}/stream/start`, {
+  // Prevent duplicate concurrent requests for the same sentinel
+  _inflightRequestStream: new Map<string, Promise<ApiResponse<{ deviceId: string; streamUrl?: string }>>>(),
+  requestStream: async (deviceId: string): Promise<ApiResponse<{ deviceId: string; streamUrl?: string }>> => {
+    const key = deviceId;
+    const existing = sentinelAPI._inflightRequestStream.get(key);
+    if (existing) return existing;
+
+    const p = fetchAPI<ApiResponse<{ deviceId: string; streamUrl?: string }>>(`/sentinels/${deviceId}/stream/start`, {
       method: 'POST',
+    }).finally(() => {
+      sentinelAPI._inflightRequestStream.delete(key);
     });
+
+    sentinelAPI._inflightRequestStream.set(key, p);
+    return p;
   },
 
   /**
@@ -217,14 +237,56 @@ export const alertAPI = {
       queryParams.append('isVerified', params.isVerified.toString());
 
     const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
-    return fetchAPI<PaginatedResponse<Alert>>(`/alerts${query}`);
+    const endpoint = `/alerts${query}`;
+
+    // Return cached response if fresh
+    const cached = _responseCache[endpoint];
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      return Promise.resolve(cached.data as PaginatedResponse<Alert>);
+    }
+
+    // Deduplicate inflight requests
+    const inflightKey = endpoint;
+    const existing = _inflightRequests.get(inflightKey);
+    if (existing) return existing;
+
+    const p = fetchAPI<PaginatedResponse<Alert>>(endpoint)
+      .then((res) => {
+        _responseCache[endpoint] = { ts: Date.now(), data: res };
+        return res;
+      })
+      .finally(() => {
+        _inflightRequests.delete(inflightKey);
+      });
+
+    _inflightRequests.set(inflightKey, p);
+    return p;
   },
 
   /**
    * Get alert statistics
    */
   getStats: async (): Promise<AlertStatsResponse> => {
-    return fetchAPI<AlertStatsResponse>('/alerts/stats');
+    const endpoint = '/alerts/stats';
+
+    const cached = _responseCache[endpoint];
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      return Promise.resolve(cached.data as AlertStatsResponse);
+    }
+
+    const inflightKey = endpoint;
+    const existing = _inflightRequests.get(inflightKey);
+    if (existing) return existing;
+
+    const p = fetchAPI<AlertStatsResponse>(endpoint)
+      .then((res) => {
+        _responseCache[endpoint] = { ts: Date.now(), data: res };
+        return res;
+      })
+      .finally(() => _inflightRequests.delete(inflightKey));
+
+    _inflightRequests.set(inflightKey, p);
+    return p;
   },
 
   /**
@@ -261,7 +323,7 @@ export const getStreamUrl = (sentinel: Sentinel): string | null => {
   if (sentinel.streamUrl && sentinel.streamUrl.includes('ngrok')) {
     return `${API_BASE_URL}/stream/${sentinel.deviceId}`;
   }
-  
+
   // If streamUrl is provided and not ngrok, use it directly
   if (sentinel.streamUrl) {
     return sentinel.streamUrl;
@@ -273,4 +335,18 @@ export const getStreamUrl = (sentinel: Sentinel): string | null => {
   }
 
   return null;
+};
+
+/**
+ * Build absolute image URL for stored alert images.
+ * If the provided `imagePath` is already an absolute URL, return it unchanged.
+ * Otherwise prefix with `API_BASE_URL` so the frontend can load images served by the backend.
+ */
+export const getImageUrl = (imagePath: string): string => {
+  if (!imagePath) return '';
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) return imagePath;
+
+  // If API_BASE_URL includes the '/api' prefix, strip it so we point at the server root
+  const apiRoot = API_BASE_URL.replace(/\/api$/, '');
+  return `${apiRoot}${imagePath}`;
 };

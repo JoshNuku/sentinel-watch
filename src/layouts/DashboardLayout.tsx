@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { 
@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { alertAPI, getImageUrl, type Alert } from "@/services/api";
+import { Badge } from "@/components/ui/badge";
+import { SensorChip, TriggerBadge } from "@/lib/sensorIcons";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -26,8 +29,42 @@ const navItems = [
 const DashboardLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const { logout, user } = useAuth();
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchRecent = async () => {
+      try {
+        const res = await alertAPI.getAll({ limit: 5 });
+        if (!mounted) return;
+        setRecentAlerts(res.data || []);
+      } catch (e) {
+        console.error('Failed to load recent alerts', e);
+      }
+    };
+
+    fetchRecent();
+    const iv = setInterval(fetchRecent, 60000); // poll less frequently (60s)
+
+    const onDocClick = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNotifOpen(false);
+    };
+
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+
+    return () => { mounted = false; clearInterval(iv); document.removeEventListener('mousedown', onDocClick); document.removeEventListener('keydown', onKey); };
+  }, []);
 
   const handleNavClick = () => {
     setMobileOpen(false);
@@ -36,7 +73,7 @@ const DashboardLayout = () => {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 glass border-b border-border/50">
+        <div className="lg:hidden fixed top-0 left-0 right-0 z-50 glass border-b border-border/50">
         <div className="flex items-center justify-between px-4 py-3">
           <Link to="/" className="flex items-center gap-3">
             <Radar className="h-7 w-7 text-primary" />
@@ -44,6 +81,20 @@ const DashboardLayout = () => {
               Project <span className="text-gradient">ORION</span>
             </span>
           </Link>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setNotifOpen(!notifOpen)}
+                className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                {recentAlerts.filter(a => !a.isVerified).length > 0 && (
+                  <Badge className="absolute -top-1 -right-1">{recentAlerts.filter(a => !a.isVerified).length}</Badge>
+                )}
+              </button>
+            </div>
+          </div>
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
@@ -192,6 +243,65 @@ const DashboardLayout = () => {
           collapsed ? "lg:ml-16" : "lg:ml-64"
         )}
       >
+        {/* Desktop topbar (notifications) */}
+        <div className="hidden lg:flex items-center justify-end p-4 border-b border-border/40 sticky top-0 z-40 bg-background/80">
+          <div className="relative" ref={notifRef}>
+            <button
+              onClick={() => setNotifOpen(!notifOpen)}
+              className="p-2 rounded-lg hover:bg-muted/50 transition-colors flex items-center gap-2"
+              aria-label="Notifications"
+            >
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              {recentAlerts.filter(a => !a.isVerified).length > 0 && (
+                <Badge className="ml-1">{recentAlerts.filter(a => !a.isVerified).length}</Badge>
+              )}
+            </button>
+
+            {notifOpen && (
+              <div className="absolute right-0 mt-2 w-80 bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
+                <div className="p-3 text-sm font-semibold">Recent Alerts</div>
+                <div className="divide-y">
+                  {recentAlerts.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No recent alerts</div>
+                  ) : (
+                    recentAlerts.map((a) => (
+                      <Link key={a._id} to="/dashboard/alerts" state={{ alertId: a._id }} className="flex items-center gap-3 p-3 hover:bg-muted/20" onClick={() => setNotifOpen(false)}>
+                        <div className="w-12 h-8 bg-background rounded overflow-hidden">
+                          {a.imageUrl ? (
+                            <img src={getImageUrl(a.imageUrl)} alt="thumb" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-muted/20" />
+                          )}
+                        </div>
+                        <div className="flex-1 text-xs">
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium truncate">{a.threatType} — {a.sentinelId}</div>
+                            {a.triggerType && (
+                              <TriggerBadge type={a.triggerType} />
+                            )}
+                          </div>
+                          <div className="text-muted-foreground text-xs">{new Date(a.timestamp).toLocaleString()}</div>
+                          {a.triggeredSensors && a.triggeredSensors.length > 0 && (
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                              {a.triggeredSensors.map((s, i) => (
+                                <SensorChip key={i} name={s} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {!a.isVerified && <div className="text-warning text-xs">New</div>}
+                      </Link>
+                    ))
+                  )}
+                </div>
+                <div className="p-2 text-center">
+                  <Link to="/dashboard/alerts" className="text-sm text-primary">View all alerts</Link>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <Outlet />
       </main>
     </div>

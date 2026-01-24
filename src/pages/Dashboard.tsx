@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { sentinelAPI, alertAPI, type Sentinel } from "@/services/api";
 import { sentinels as dummySentinels } from "@/lib/dummy-data";
@@ -6,7 +6,7 @@ import { wsService, type NewAlertEvent } from "@/services/websocket";
 import StatCard from "@/components/dashboard/StatCard";
 import MapComponent from "@/components/dashboard/MapComponent";
 import LiveFeed from "@/components/dashboard/LiveFeed";
-import AlertsList from "@/components/dashboard/AlertsList";
+import SentinelsGrid from "@/components/dashboard/SentinelsGrid";
 import { Radio, Activity, AlertTriangle, WifiOff, Bell, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +16,7 @@ const Dashboard = () => {
   const [sentinels, setSentinels] = useState<Sentinel[]>([]);
   const [selectedSentinel, setSelectedSentinel] = useState<Sentinel | null>(null);
   const [isStreamActive, setIsStreamActive] = useState(false);
+  const [manualRequestingDevice, setManualRequestingDevice] = useState<string | null>(null);
   const [alertStats, setAlertStats] = useState({
     total: 0,
     last24Hours: 0
@@ -23,22 +24,31 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const stopCooldownRef = useRef<number>(0); // Prevent notifications after stopping feed
   const { toast } = useToast();
 
+
+
   // Fetch sentinels from backend
-  const fetchSentinels = async () => {
+  const fetchSentinels = useCallback(async () => {
+    // throttle: avoid backend flooding
+    const now = Date.now();
+    if (lastFetchRef.current && now - lastFetchRef.current < 5000) {
+      // skip if we fetched less than 5s ago
+      return;
+    }
     try {
       // Don't set loading on poll updates to avoid UI flicker
       // only set loading on initial fetch
       if (sentinels.length === 0) setLoading(true);
       setError(null);
-      
+
       const response = await sentinelAPI.getAll();
       console.log('📡 Fetched sentinels:', response.data?.length);
-      
+
       if (response.success && response.data) {
         setSentinels(response.data);
-        
+
         // If a sentinel was previously selected, update it with new data
         if (selectedSentinel) {
           const updatedSelected = response.data.find(
@@ -68,11 +78,15 @@ const Dashboard = () => {
       }
     } finally {
       setLoading(false);
+      lastFetchRef.current = Date.now();
     }
-  };
+  }, [selectedSentinel, sentinels.length]);
+
+  // last fetch timestamp to throttle background calls
+  const lastFetchRef = useRef<number>(0);
 
   // Fetch alert statistics
-  const fetchAlertStats = async () => {
+  const fetchAlertStats = useCallback(async () => {
     try {
       const response = await alertAPI.getStats();
       if (response.success && response.data) {
@@ -84,7 +98,7 @@ const Dashboard = () => {
     } catch (err) {
       console.error("Failed to fetch alert stats:", err);
     }
-  };
+  }, []);
 
   // Setup WebSocket connection and listeners
   useEffect(() => {
@@ -95,12 +109,39 @@ const Dashboard = () => {
     // Listen for connection status changes
     const checkConnection = setInterval(() => {
       setWsConnected(wsService.isConnected());
-    }, 2000);
+    }, 10000); // check less frequently to reduce load
+
+    // Track last alert to prevent duplicate toast notifications
+    let lastAlertId: string | null = null;
+    let lastAlertTime = 0;
 
     // Subscribe to new alert events
     const unsubscribeAlerts = wsService.onNewAlert((data: NewAlertEvent) => {
       console.log('🚨 New alert received:', data);
-      
+
+      // Deduplicate: skip if same alert ID or if received within 3 seconds
+      const alertId = data.alert._id || data.alert.sentinelId + data.alert.timestamp;
+      const now = Date.now();
+      if (alertId === lastAlertId || now - lastAlertTime < 3000) {
+        console.log('🔄 Skipping duplicate alert notification');
+        return;
+      }
+
+      // Skip if user just stopped the feed (5 second cooldown)
+      if (now - stopCooldownRef.current < 5000) {
+        console.log('🔄 Skipping alert notification (stop feed cooldown)');
+        return;
+      }
+
+      // Skip 'unknown' threat types - these are often false positives
+      if (data.alert.threatType === 'unknown') {
+        console.log('🔄 Skipping unknown threat type alert (suppressed)');
+        return;
+      }
+
+      lastAlertId = alertId;
+      lastAlertTime = now;
+
       // Show toast notification
       toast({
         title: "🚨 New Threat Detected!",
@@ -108,16 +149,17 @@ const Dashboard = () => {
         variant: "destructive",
       });
 
-      // Auto-select the sentinel with the alert immediately using fresh data from event
-      // This ensures we have the latest stream URL and status
-      if (data.sentinel) {
-        console.log('📡 Selecting alerted sentinel with fresh data:', data.sentinel.deviceId);
-        setSelectedSentinel(data.sentinel);
-      }
+      // NOTE: We do NOT auto-select the sentinel to avoid interrupting existing streams
+      // The LiveFeed component will handle auto-starting if the sentinel is already selected
+      console.log('📡 Alert received for sentinel:', data.sentinel?.deviceId);
 
-      // Refresh data in background
-      fetchSentinels();
-      fetchAlertStats();
+      // Refresh data in background (throttled)
+      if (!lastFetchRef.current || Date.now() - lastFetchRef.current > 5000) {
+        fetchSentinels();
+      }
+      if (!lastFetchRef.current || Date.now() - lastFetchRef.current > 60000) {
+        fetchAlertStats();
+      }
     });
 
     // Subscribe to alert verified events
@@ -133,16 +175,16 @@ const Dashboard = () => {
     // Subscribe to sentinel status updates (e.g., auto-reset from alert to active)
     const unsubscribeStatusUpdate = wsService.onSentinelStatusUpdate((data) => {
       console.log('🔄 Sentinel status update:', data);
-      
+
       // Update the sentinel in the list
-      setSentinels(prev => prev.map(s => 
-        s.deviceId === data.deviceId 
+      setSentinels(prev => prev.map(s =>
+        s.deviceId === data.deviceId
           ? { ...s, status: data.status }
           : s
       ));
-      
+
       // Update selected sentinel if it's the one that changed
-      setSelectedSentinel(prev => 
+      setSelectedSentinel(prev =>
         prev?.deviceId === data.deviceId
           ? { ...prev, status: data.status }
           : prev
@@ -156,21 +198,21 @@ const Dashboard = () => {
       unsubscribeStatusUpdate();
       clearInterval(checkConnection);
     };
-  }, [sentinels, toast]);
+  }, [fetchSentinels, fetchAlertStats, toast]);
 
   // Initial data fetch
   useEffect(() => {
     fetchSentinels();
     fetchAlertStats();
 
-    // Auto-refresh every 30 seconds
+    // Auto-refresh every 60 seconds (reduced frequency to lower backend load)
     const intervalId = setInterval(() => {
       fetchSentinels();
       fetchAlertStats();
-    }, 30000);
+    }, 60000);
 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [fetchSentinels, fetchAlertStats]);
 
   // Restore selection when navigated from LiveMap or from previous tab (sessionStorage)
   useEffect(() => {
@@ -236,25 +278,25 @@ const Dashboard = () => {
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Total Sentinels" 
-          value={sentinels.length} 
+        <StatCard
+          title="Total Sentinels"
+          value={sentinels.length}
           icon={<Radio className="h-5 w-5 text-primary" />}
         />
-        <StatCard 
-          title="Active" 
-          value={activeSentinels} 
+        <StatCard
+          title="Active"
+          value={activeSentinels}
           icon={<Activity className="h-5 w-5 text-primary" />}
           variant="success"
         />
-        <StatCard 
-          title="Inactive" 
-          value={inactiveSentinels} 
+        <StatCard
+          title="Inactive"
+          value={inactiveSentinels}
           icon={<WifiOff className="h-5 w-5 text-muted-foreground" />}
         />
-        <StatCard 
-          title="Alerts Today" 
-          value={alertStats.last24Hours} 
+        <StatCard
+          title="Alerts Today"
+          value={alertStats.last24Hours}
           icon={<Bell className="h-5 w-5 text-warning" />}
           variant={alertStats.last24Hours > 0 ? "warning" : "default"}
         />
@@ -265,7 +307,7 @@ const Dashboard = () => {
         {/* Left: Map + Alerts stacked */}
         <div className="lg:col-span-3 flex flex-col gap-6">
           <div className="h-[440px]">
-            <MapComponent 
+            <MapComponent
               sentinels={sentinels}
               selectedSentinel={selectedSentinel}
               onSentinelSelect={setSelectedSentinel}
@@ -278,15 +320,43 @@ const Dashboard = () => {
             />
           </div>
           <div className="flex-1 min-h-[220px]">
-            <AlertsList />
+            <SentinelsGrid
+              sentinels={sentinels}
+              onFocus={(s) => setSelectedSentinel(s)}
+              onViewStream={async (s) => {
+                setSelectedSentinel(s);
+                setManualRequestingDevice(s.deviceId);
+                try {
+                  const res = await sentinelAPI.requestStream(s.deviceId);
+                  if (res && res.success && res.data?.streamUrl) {
+                    // update selected sentinel with returned streamUrl so LiveFeed can use it
+                    setSelectedSentinel(prev => prev ? { ...prev, streamUrl: res.data!.streamUrl } : prev);
+                    setIsStreamActive(true);
+                    fetchSentinels();
+                    toast({ title: 'Stream started', description: `${s.deviceId} stream available` });
+                  } else if (res && res.success) {
+                    // success but no streamUrl yet — backend is polling; notify user
+                    toast({ title: 'Stream requested', description: `Waiting for ${s.deviceId} to publish stream`, variant: 'default' });
+                  }
+                } catch (err) {
+                  console.error('Failed to request stream:', err);
+                  toast({ title: 'Stream request failed', description: 'Unable to start stream', variant: 'destructive' });
+                } finally {
+                  // clear requesting flag; LiveFeed will still show loading if it set internal flag or other flows
+                  setTimeout(() => setManualRequestingDevice(null), 5000);
+                }
+              }}
+            />
           </div>
         </div>
 
         {/* Right: Full-height Live Feed */}
         <div className="lg:col-span-2 h-[440px]">
-          <LiveFeed 
+          <LiveFeed
             sentinel={selectedSentinel}
+            externalManualRequest={manualRequestingDevice === selectedSentinel?.deviceId}
             onClose={() => {
+              stopCooldownRef.current = Date.now(); // Prevent false threat notifications
               setSelectedSentinel(null);
               setIsStreamActive(false);
             }}

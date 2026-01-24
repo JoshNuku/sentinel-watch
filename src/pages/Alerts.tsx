@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { alertAPI, type Alert } from "@/services/api";
+import { useNavigate, useLocation } from "react-router-dom";
+import { alertAPI, getImageUrl, type Alert } from "@/services/api";
 import { wsService } from "@/services/websocket";
 import { 
   Bell, 
@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { SensorChip, TriggerBadge } from "@/lib/sensorIcons";
 
 const threatIcons = {
   Excavator: Construction,
@@ -40,13 +41,20 @@ const threatIcons = {
 
 const Alerts = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "verified" | "unverified">("all");
   const [threatFilter, setThreatFilter] = useState<string>("all");
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
   const [verifying, setVerifying] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Reset image-failed state whenever a new alert is selected
+    setImgFailed(false);
+  }, [selectedAlert?._id]);
 
   const fetchAlerts = async () => {
     try {
@@ -79,6 +87,24 @@ const Alerts = () => {
       unsubscribe();
     };
   }, []);
+
+  // If navigated with a specific alertId in state, auto-select that alert
+  useEffect(() => {
+    const stateObj = (location.state as { alertId?: string } | null) || null;
+    const alertId = stateObj?.alertId;
+    if (alertId && alerts.length > 0) {
+      const match = alerts.find(a => a._id === alertId);
+      if (match) {
+        setSelectedAlert(match);
+        // clear navigation state so selecting again doesn't retrigger
+        try {
+          navigate(location.pathname, { replace: true, state: {} });
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  }, [alerts, location, navigate]);
 
   const handleVerify = async (alertId: string, isVerified: boolean) => {
     try {
@@ -226,7 +252,7 @@ const Alerts = () => {
               
               return (
                 <div 
-                  key={alert.id}
+                  key={alert._id}
                   onClick={() => setSelectedAlert(alert)}
                   className={cn(
                     "glass rounded-xl p-4 cursor-pointer transition-all duration-200 hover:bg-card/80",
@@ -239,7 +265,7 @@ const Alerts = () => {
                       <div className={cn(
                         "p-2 rounded-lg",
                         alert.threatType === 'Excavator' && "bg-destructive/10 text-destructive",
-                        alert.threatType === 'Vehicle' && "bg-warning/10 text-warning",
+                        ['car','truck','motorcycle','bus'].includes(alert.threatType) && "bg-warning/10 text-warning",
                         alert.threatType === 'Water Pump' && "bg-blue-500/10 text-blue-400"
                       )}>
                         <ThreatIcon className="h-5 w-5" />
@@ -248,7 +274,7 @@ const Alerts = () => {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold">{alert.threatType}</span>
                           <Badge variant="outline" className="text-xs">
-                            {alert.id}
+                            {alert._id.slice(-8)}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
@@ -296,11 +322,20 @@ const Alerts = () => {
             </h3>
             {selectedAlert ? (
               <div className="space-y-4">
-                <div className="aspect-video bg-background/50 rounded-lg flex items-center justify-center border border-border/50">
-                  <div className="text-center text-muted-foreground">
-                    <Construction className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Captured Image</p>
-                  </div>
+                <div className="aspect-video bg-background/50 rounded-lg flex items-center justify-center border border-border/50 overflow-hidden">
+                  {selectedAlert.imageUrl && !imgFailed ? (
+                    <img
+                      src={getImageUrl(selectedAlert.imageUrl)}
+                      alt="Captured"
+                      className="w-full h-full object-cover"
+                      onError={() => setImgFailed(true)}
+                    />
+                  ) : (
+                    <div className="text-center text-muted-foreground p-4">
+                      <Construction className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">Captured Image</p>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
@@ -315,6 +350,22 @@ const Alerts = () => {
                     <span className="text-muted-foreground">Threat</span>
                     <span>{selectedAlert.threatType}</span>
                   </div>
+                  {selectedAlert.triggerType && (
+                    <div className="flex flex-col text-sm">
+                      <span className="text-muted-foreground">Trigger</span>
+                      <div className="mt-1"><TriggerBadge type={selectedAlert.triggerType} /></div>
+                    </div>
+                  )}
+                  {selectedAlert.triggeredSensors && selectedAlert.triggeredSensors.length > 0 && (
+                    <div className="flex flex-col text-sm">
+                      <span className="text-muted-foreground">Sensors</span>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedAlert.triggeredSensors.map((s, i) => (
+                          <SensorChip key={i} name={s} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Time</span>
                     <span>{format(new Date(selectedAlert.timestamp), 'PPpp')}</span>

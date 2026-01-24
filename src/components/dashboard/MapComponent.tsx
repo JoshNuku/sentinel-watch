@@ -26,6 +26,29 @@ const getMarkerColor = (status: Sentinel["status"]) => {
   }
 };
 
+const getTriggerBadgeHTML = (triggerType?: string) => {
+  if (!triggerType) return '';
+
+  const mapping: Record<string, { label: string; bgColor: string; textColor: string; icon: string }> = {
+    pir: { label: 'PIR', bgColor: 'rgba(255, 228, 230, 0.2)', textColor: '#e11d48', icon: '⚡' },
+    motion: { label: 'Motion', bgColor: 'rgba(255, 228, 230, 0.2)', textColor: '#e11d48', icon: '⚡' },
+    vibration: { label: 'Vibration', bgColor: 'rgba(254, 243, 199, 0.2)', textColor: '#d97706', icon: '📊' },
+    sound: { label: 'Sound', bgColor: 'rgba(224, 242, 254, 0.2)', textColor: '#0284c7', icon: '🔊' },
+    gpio: { label: 'GPIO', bgColor: 'rgba(220, 252, 231, 0.2)', textColor: '#15803d', icon: '💻' },
+    location: { label: 'Location', bgColor: 'rgba(224, 231, 255, 0.2)', textColor: '#4338ca', icon: '📍' },
+  };
+
+  const key = triggerType.toLowerCase();
+  const meta = mapping[key] || { label: triggerType, bgColor: 'rgba(148, 163, 184, 0.2)', textColor: '#64748b', icon: '📍' };
+
+  return `
+    <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: ${meta.bgColor}; color: ${meta.textColor};">
+      <span>${meta.icon}</span>
+      <span>${meta.label}</span>
+    </div>
+  `;
+};
+
 const createCustomIcon = (status: Sentinel["status"], isSelected: boolean = false) => {
   const color = getMarkerColor(status);
   const scale = isSelected ? 1.2 : 1;
@@ -38,7 +61,7 @@ const createCustomIcon = (status: Sentinel["status"], isSelected: boolean = fals
       ${status === "alert" ? `<circle cx="16" cy="16" r="12" fill="none" stroke="${color}" stroke-width="2" opacity="0.5"><animate attributeName="r" from="8" to="16" dur="1s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.8" to="0" dur="1s" repeatCount="indefinite"/></circle>` : ""}
     </svg>
   `;
-  
+
   return L.divIcon({
     html: svgIcon,
     className: "custom-marker",
@@ -55,7 +78,7 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
 
   useEffect(() => {
     if (!mapRef.current) return;
-    
+
     // Always cleanup previous instance if it exists (shouldn't happen with cleanup, but safety first)
     if (mapInstanceRef.current) {
       mapInstanceRef.current.remove();
@@ -99,7 +122,7 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
     if (!mapInstanceRef.current) return;
 
     const map = mapInstanceRef.current;
-    
+
     // Remove markers that no longer exist
     markersRef.current.forEach((marker, deviceId) => {
       if (!sentinels.find(s => s.deviceId === deviceId)) {
@@ -140,10 +163,10 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
       const statusColor = getMarkerColor(sentinel.status);
       const statusLabel = sentinel.status.charAt(0).toUpperCase() + sentinel.status.slice(1);
       const batteryColor = sentinel.batteryLevel > 50 ? '#22c55e' : sentinel.batteryLevel > 20 ? '#f59e0b' : '#ef4444';
-      
+
       // Only show "Stop Video Feed" if this sentinel is selected AND stream is active
       const showStopButton = isSelected && isStreamActive;
-      
+
       marker.bindPopup(`
         <div style="min-width: 200px; padding: 8px;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
@@ -155,6 +178,11 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
               <span style="color: #94a3b8;">Status</span>
               <span style="color: ${statusColor}; font-weight: 500;">${statusLabel}</span>
             </div>
+            ${sentinel.status === 'alert' && sentinel.triggerType ? `
+              <div style="display: flex; justify-content: flex-end;">
+                ${getTriggerBadgeHTML(sentinel.triggerType)}
+              </div>
+            ` : ''}
             <div style="display: flex; justify-content: space-between;">
               <span style="color: #94a3b8;">Battery</span>
               <span style="font-weight: 500;">${sentinel.batteryLevel}%</span>
@@ -222,9 +250,9 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
           <span className="text-sm">Loading sentinels...</span>
         </div>
       )}
-      
+
       <div ref={mapRef} className="w-full h-full z-0" style={{ minHeight: "400px" }} />
-      
+
       {/* Map overlay legend */}
       <div className="absolute bottom-4 left-4 rounded-lg p-3 z-10 bg-card/90 backdrop-blur-sm border border-border">
         <p className="text-xs font-medium mb-2 text-muted-foreground">Status Legend</p>
