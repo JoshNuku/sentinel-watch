@@ -40,7 +40,7 @@ const Login: React.FC = () => {
       </div>
       
       {/* Background effects */}
-      <div className="absolute inset-0 bg-gradient-dark opacity-80" />
+      <div className="absolute inset-0 bg-gray-950/85" />
       <div className="absolute inset-0 bg-gradient-radial" />
       
       {/* Animated grid overlay */}

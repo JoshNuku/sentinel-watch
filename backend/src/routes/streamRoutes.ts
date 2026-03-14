@@ -10,8 +10,6 @@ const router = Router();
  * This bypasses ngrok's browser warning page
  */
 router.get('/:deviceId', async (req: Request, res: Response) => {
-  let streamActive = false;
-  
   try {
     const { deviceId } = req.params;
     
@@ -49,21 +47,17 @@ router.get('/:deviceId', async (req: Request, res: Response) => {
     res.setHeader('Expires', '0');
     res.setHeader('Connection', 'close');
 
-    streamActive = true;
-
     // Handle client disconnect
     req.on('close', () => {
       console.log(`🔌 Client disconnected from stream: ${deviceId}`);
       if (response.data && !response.data.destroyed) {
         response.data.destroy();
       }
-      streamActive = false;
     });
 
     // Handle stream errors
     response.data.on('error', (error: Error) => {
       console.error(`❌ Stream error for ${deviceId}:`, error.message);
-      streamActive = false;
       if (!res.headersSent) {
         res.status(500).json({ success: false, message: 'Stream error' });
       } else if (!res.writableEnded) {
@@ -74,7 +68,6 @@ router.get('/:deviceId', async (req: Request, res: Response) => {
     // Handle stream end
     response.data.on('end', () => {
       console.log(`✅ Stream ended for ${deviceId}`);
-      streamActive = false;
       if (!res.writableEnded) {
         res.end();
       }
@@ -85,7 +78,6 @@ router.get('/:deviceId', async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('❌ Stream proxy error:', error);
-    streamActive = false;
     
     if (!res.headersSent) {
       res.status(500).json({
