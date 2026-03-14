@@ -24,10 +24,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const stopCooldownRef = useRef<number>(0); // Prevent notifications after stopping feed
   const { toast } = useToast();
 
-
+  
 
   // Fetch sentinels from backend
   const fetchSentinels = useCallback(async () => {
@@ -111,37 +110,10 @@ const Dashboard = () => {
       setWsConnected(wsService.isConnected());
     }, 10000); // check less frequently to reduce load
 
-    // Track last alert to prevent duplicate toast notifications
-    let lastAlertId: string | null = null;
-    let lastAlertTime = 0;
-
     // Subscribe to new alert events
     const unsubscribeAlerts = wsService.onNewAlert((data: NewAlertEvent) => {
       console.log('🚨 New alert received:', data);
-
-      // Deduplicate: skip if same alert ID or if received within 3 seconds
-      const alertId = data.alert._id || data.alert.sentinelId + data.alert.timestamp;
-      const now = Date.now();
-      if (alertId === lastAlertId || now - lastAlertTime < 3000) {
-        console.log('🔄 Skipping duplicate alert notification');
-        return;
-      }
-
-      // Skip if user just stopped the feed (5 second cooldown)
-      if (now - stopCooldownRef.current < 5000) {
-        console.log('🔄 Skipping alert notification (stop feed cooldown)');
-        return;
-      }
-
-      // Skip 'unknown' threat types - these are often false positives
-      if (data.alert.threatType === 'unknown') {
-        console.log('🔄 Skipping unknown threat type alert (suppressed)');
-        return;
-      }
-
-      lastAlertId = alertId;
-      lastAlertTime = now;
-
+      
       // Show toast notification
       toast({
         title: "🚨 New Threat Detected!",
@@ -149,9 +121,12 @@ const Dashboard = () => {
         variant: "destructive",
       });
 
-      // NOTE: We do NOT auto-select the sentinel to avoid interrupting existing streams
-      // The LiveFeed component will handle auto-starting if the sentinel is already selected
-      console.log('📡 Alert received for sentinel:', data.sentinel?.deviceId);
+      // Auto-select the sentinel with the alert immediately using fresh data from event
+      // This ensures we have the latest stream URL and status
+      if (data.sentinel) {
+        console.log('📡 Selecting alerted sentinel with fresh data:', data.sentinel.deviceId);
+        setSelectedSentinel(data.sentinel);
+      }
 
       // Refresh data in background (throttled)
       if (!lastFetchRef.current || Date.now() - lastFetchRef.current > 5000) {
@@ -175,16 +150,16 @@ const Dashboard = () => {
     // Subscribe to sentinel status updates (e.g., auto-reset from alert to active)
     const unsubscribeStatusUpdate = wsService.onSentinelStatusUpdate((data) => {
       console.log('🔄 Sentinel status update:', data);
-
+      
       // Update the sentinel in the list
-      setSentinels(prev => prev.map(s =>
-        s.deviceId === data.deviceId
+      setSentinels(prev => prev.map(s => 
+        s.deviceId === data.deviceId 
           ? { ...s, status: data.status }
           : s
       ));
-
+      
       // Update selected sentinel if it's the one that changed
-      setSelectedSentinel(prev =>
+      setSelectedSentinel(prev => 
         prev?.deviceId === data.deviceId
           ? { ...prev, status: data.status }
           : prev
@@ -278,25 +253,25 @@ const Dashboard = () => {
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Sentinels"
-          value={sentinels.length}
+        <StatCard 
+          title="Total Sentinels" 
+          value={sentinels.length} 
           icon={<Radio className="h-5 w-5 text-primary" />}
         />
-        <StatCard
-          title="Active"
-          value={activeSentinels}
+        <StatCard 
+          title="Active" 
+          value={activeSentinels} 
           icon={<Activity className="h-5 w-5 text-primary" />}
           variant="success"
         />
-        <StatCard
-          title="Inactive"
-          value={inactiveSentinels}
+        <StatCard 
+          title="Inactive" 
+          value={inactiveSentinels} 
           icon={<WifiOff className="h-5 w-5 text-muted-foreground" />}
         />
-        <StatCard
-          title="Alerts Today"
-          value={alertStats.last24Hours}
+        <StatCard 
+          title="Alerts Today" 
+          value={alertStats.last24Hours} 
           icon={<Bell className="h-5 w-5 text-warning" />}
           variant={alertStats.last24Hours > 0 ? "warning" : "default"}
         />
@@ -307,7 +282,7 @@ const Dashboard = () => {
         {/* Left: Map + Alerts stacked */}
         <div className="lg:col-span-3 flex flex-col gap-6">
           <div className="h-[440px]">
-            <MapComponent
+            <MapComponent 
               sentinels={sentinels}
               selectedSentinel={selectedSentinel}
               onSentinelSelect={setSelectedSentinel}
@@ -352,11 +327,10 @@ const Dashboard = () => {
 
         {/* Right: Full-height Live Feed */}
         <div className="lg:col-span-2 h-[440px]">
-          <LiveFeed
+          <LiveFeed 
             sentinel={selectedSentinel}
             externalManualRequest={manualRequestingDevice === selectedSentinel?.deviceId}
             onClose={() => {
-              stopCooldownRef.current = Date.now(); // Prevent false threat notifications
               setSelectedSentinel(null);
               setIsStreamActive(false);
             }}

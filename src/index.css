@@ -6,57 +6,57 @@
 
 @layer base {
   :root {
-    --background: 220 20% 6%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 98%;
+    --foreground: 220 20% 10%;
 
-    --card: 220 18% 10%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
 
-    --popover: 220 18% 10%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
 
-    --primary: 142 76% 45%;
-    --primary-foreground: 0 0% 2%;
+    --primary: 142 76% 40%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 16% 14%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 10%;
 
-    --muted: 220 14% 18%;
-    --muted-foreground: 220 10% 55%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 10% 40%;
 
     --accent: 142 60% 35%;
-    --accent-foreground: 0 0% 98%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 2%;
+    --warning-foreground: 0 0% 10%;
 
-    --success: 142 76% 45%;
-    --success-foreground: 0 0% 2%;
+    --success: 142 76% 40%;
+    --success-foreground: 0 0% 100%;
 
-    --border: 220 14% 18%;
-    --input: 220 14% 18%;
-    --ring: 142 76% 45%;
+    --border: 220 14% 90%;
+    --input: 220 14% 90%;
+    --ring: 142 76% 40%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 220 20% 8%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 142 76% 45%;
-    --sidebar-primary-foreground: 0 0% 2%;
-    --sidebar-accent: 220 14% 14%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 220 14% 16%;
-    --sidebar-ring: 142 76% 45%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 20% 20%;
+    --sidebar-primary: 142 76% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 220 20% 10%;
+    --sidebar-border: 220 14% 92%;
+    --sidebar-ring: 142 76% 40%;
 
     /* Custom tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(142 76% 45%) 0%, hsl(160 84% 39%) 100%);
-    --gradient-dark: linear-gradient(180deg, hsl(220 20% 8%) 0%, hsl(220 20% 4%) 100%);
-    --gradient-radial: radial-gradient(ellipse at center, hsl(142 76% 45% / 0.15) 0%, transparent 70%);
-    --shadow-glow: 0 0 60px hsl(142 76% 45% / 0.3);
-    --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.4);
+    --gradient-primary: linear-gradient(135deg, hsl(142 76% 40%) 0%, hsl(160 84% 35%) 100%);
+    --gradient-dark: linear-gradient(180deg, hsl(220 14% 96%) 0%, hsl(220 14% 92%) 100%);
+    --gradient-radial: radial-gradient(ellipse at center, hsl(142 76% 40% / 0.1) 0%, transparent 70%);
+    --shadow-glow: 0 0 60px hsl(142 76% 40% / 0.2);
+    --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.08);
   }
 
   .dark {
@@ -124,7 +124,7 @@
 
 /* Leaflet overrides - contain z-index within map */
 .leaflet-container {
-  background: hsl(220 20% 6%) !important;
+  background: hsl(0 0% 98%) !important;
   font-family: 'Outfit', sans-serif !important;
   isolation: isolate;
 }
@@ -137,7 +137,6 @@
 }
 
 .leaflet-tile-pane {
-  filter: brightness(0.6) saturate(0.3) hue-rotate(90deg);
   z-index: 1 !important;
 }
 
@@ -154,22 +153,23 @@
 }
 
 .leaflet-popup-content-wrapper {
-  background: hsl(220 18% 10%) !important;
-  color: hsl(0 0% 98%) !important;
+  background: hsl(0 0% 100%) !important;
+  color: hsl(220 20% 10%) !important;
   border-radius: 0.75rem !important;
-  border: 1px solid hsl(220 14% 18%) !important;
+  border: 1px solid hsl(220 14% 90%) !important;
+  box-shadow: 0 4px 12px hsl(0 0% 0% / 0.1) !important;
 }
 
 .leaflet-popup-tip {
-  background: hsl(220 18% 10%) !important;
+  background: hsl(0 0% 100%) !important;
 }
 
 .leaflet-control-zoom a {
-  background: hsl(220 18% 10%) !important;
-  color: hsl(0 0% 98%) !important;
-  border-color: hsl(220 14% 18%) !important;
+  background: hsl(0 0% 100%) !important;
+  color: hsl(220 20% 10%) !important;
+  border-color: hsl(220 14% 90%) !important;
 }
 
 .leaflet-control-zoom a:hover {
-  background: hsl(220 14% 14%) !important;
+  background: hsl(220 14% 96%) !important;
 }

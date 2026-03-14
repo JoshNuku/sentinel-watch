@@ -34,7 +34,7 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
     console.log('\n=== ALERT CREATION REQUEST ===');
     console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
     console.log('📥 Headers:', req.headers['content-type']);
-
+    
     const {
       sentinelId,
       threatType,
@@ -43,12 +43,11 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
       timestamp,
       imageData, // Base64 encoded JPEG from Raspberry Pi
       triggerType,
-      triggeredSensors,
-      streamUrl // Stream URL from Pi (ngrok or direct)
+      triggeredSensors
     } = req.body;
 
-    // Validation - use explicit checks for confidence since 0 is a valid value
-    if (!sentinelId || !threatType || confidence === undefined || confidence === null || !location) {
+    // Validation
+    if (!sentinelId || !threatType || !confidence || !location) {
       console.log('❌ Validation failed - missing fields');
       console.log('   sentinelId:', sentinelId);
       console.log('   threatType:', threatType);
@@ -81,7 +80,7 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
     const sentinel = await Sentinel.findOne({ deviceId: sentinelId.toUpperCase() });
     console.log('🔍 Sentinel lookup for:', sentinelId.toUpperCase());
     console.log('   Found:', sentinel ? `${sentinel.deviceId} (${sentinel.status})` : 'NOT FOUND');
-
+    
     if (!sentinel) {
       res.status(404).json({
         success: false,
@@ -117,15 +116,15 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
         if (!fs.existsSync(uploadsDir)) {
           fs.mkdirSync(uploadsDir, { recursive: true });
         }
-
+        
         const imagePath = path.join(uploadsDir, `${alert._id}.jpg`);
         const imageBuffer = Buffer.from(imageData, 'base64');
         fs.writeFileSync(imagePath, imageBuffer);
-
+        
         // Update alert with image URL
         alert.imageUrl = `/uploads/alerts/${alert._id}.jpg`;
         await alert.save();
-
+        
         console.log(`📸 Alert image saved: ${imagePath} (${Math.round(imageBuffer.length / 1024)}KB)`);
       } catch (imageError) {
         console.error('❌ Failed to save alert image:', imageError);
@@ -133,16 +132,9 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
       }
     }
 
-    // Step 2: Update Sentinel status to 'alert' and save streamUrl if provided
+    // Step 2: Update Sentinel status to 'alert'
     sentinel.status = SentinelStatus.ALERT;
     sentinel.lastSeen = new Date();
-
-    // Save streamUrl from Pi so dashboard can use it for stream requests
-    if (streamUrl) {
-      sentinel.streamUrl = streamUrl;
-      console.log('📹 Updated sentinel streamUrl:', streamUrl);
-    }
-
     await sentinel.save();
     console.log('✅ Sentinel status updated to:', sentinel.status);
 
@@ -155,7 +147,7 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
           updatedSentinel.status = SentinelStatus.ACTIVE;
           await updatedSentinel.save();
           console.log(`⏰ Auto-reset: ${sentinelId} status changed from alert to active`);
-
+          
           // Emit status update to connected clients
           if (io) {
             io.emit('sentinel-status-update', {
@@ -216,7 +208,7 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
     });
   } catch (error) {
     console.error('❌ Error creating alert:', error);
-
+    
     res.status(500).json({
       success: false,
       message: 'Failed to create alert',
@@ -286,7 +278,7 @@ export const getAllAlerts = async (req: Request, res: Response): Promise<void> =
     });
   } catch (error) {
     console.error('❌ Error fetching alerts:', error);
-
+    
     res.status(500).json({
       success: false,
       message: 'Failed to fetch alerts',
@@ -319,7 +311,7 @@ export const getAlertById = async (req: Request, res: Response): Promise<void> =
     });
   } catch (error) {
     console.error('❌ Error fetching alert:', error);
-
+    
     res.status(500).json({
       success: false,
       message: 'Failed to fetch alert',
@@ -368,7 +360,7 @@ export const verifyAlert = async (req: Request, res: Response): Promise<void> =>
     });
   } catch (error) {
     console.error('❌ Error verifying alert:', error);
-
+    
     res.status(500).json({
       success: false,
       message: 'Failed to verify alert',
@@ -417,7 +409,7 @@ export const getAlertStats = async (_req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     console.error('❌ Error fetching alert stats:', error);
-
+    
     res.status(500).json({
       success: false,
       message: 'Failed to fetch alert statistics',

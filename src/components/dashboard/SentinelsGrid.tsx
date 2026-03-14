@@ -27,7 +27,7 @@ const SentinelsGrid: React.FC<Props> = ({ sentinels, onFocus, onViewStream }) =>
                 <Badge className={s.status === 'alert' ? 'bg-warning/10 text-warning' : s.status === 'active' ? 'bg-primary/10 text-primary' : ''}>
                   {s.status}
                 </Badge>
-                {s.status === 'alert' && s.triggerType && (
+                {s.triggerType && (
                   <div className="mt-1">
                     <TriggerBadge type={s.triggerType} />
                   </div>

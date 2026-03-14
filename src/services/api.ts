@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * API Service for Project ORION
  * Handles all backend communication
@@ -33,20 +34,20 @@ export interface Sentinel {
   lastSeen: string;
   ipAddress?: string;
   streamUrl?: string; // Direct video stream URL
-  triggerType?: 'ai' | 'camera' | 'pir' | 'vibration' | 'motion' | 'infrared' | 'pressure' | 'laser' | 'microphone' | 'sound' | 'remote' | 'manual' | 'gpio';
+  triggerType?: 'gpio' | 'microphone' | 'remote' | 'ai';
   triggeredSensors?: string[];
 }
 
 export interface Alert {
   _id: string;
   sentinelId: string;
-  threatType: 'person' | 'car' | 'truck' | 'motorcycle' | 'bus' | 'animal' | 'unknown';
+  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person' | 'person' | 'car' | 'truck' | 'motorcycle' | 'bus';
   confidence: number;
   location: Location;
   timestamp: string;
   isVerified: boolean;
   imageUrl?: string;  // URL to saved alert image
-  triggerType?: 'ai' | 'camera' | 'pir' | 'vibration' | 'motion' | 'infrared' | 'pressure' | 'laser' | 'microphone' | 'sound' | 'remote' | 'manual' | 'gpio';
+  triggerType?: 'gpio' | 'microphone' | 'remote' | 'ai';
   triggeredSensors?: string[];
 }
 
@@ -323,7 +324,7 @@ export const getStreamUrl = (sentinel: Sentinel): string | null => {
   if (sentinel.streamUrl && sentinel.streamUrl.includes('ngrok')) {
     return `${API_BASE_URL}/stream/${sentinel.deviceId}`;
   }
-
+  
   // If streamUrl is provided and not ngrok, use it directly
   if (sentinel.streamUrl) {
     return sentinel.streamUrl;
@@ -347,6 +348,6 @@ export const getImageUrl = (imagePath: string): string => {
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) return imagePath;
 
   // If API_BASE_URL includes the '/api' prefix, strip it so we point at the server root
-  const apiRoot = API_BASE_URL.replace(/\/api$/, '');
+  const apiRoot = API_BASE_URL.replace(/\/api$/, '') ;
   return `${apiRoot}${imagePath}`;
 };

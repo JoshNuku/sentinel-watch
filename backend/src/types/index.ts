@@ -18,29 +18,14 @@ export enum ThreatType {
   CAR = 'car',
   TRUCK = 'truck',
   MOTORCYCLE = 'motorcycle',
-  BUS = 'bus',
-  ANIMAL = 'animal',
-  UNKNOWN = 'unknown'
+  BUS = 'bus'
 }
 
 export enum TriggerType {
-  // AI/Camera triggers
-  AI = 'ai',
-  CAMERA = 'camera',
-  // Sensor triggers
-  PIR = 'pir',
-  VIBRATION = 'vibration',
-  MOTION = 'motion',
-  INFRARED = 'infrared',
-  PRESSURE = 'pressure',
-  LASER = 'laser',
-  // Audio triggers
+  GPIO = 'gpio',
   MICROPHONE = 'microphone',
-  SOUND = 'sound',
-  // Other triggers
   REMOTE = 'remote',
-  MANUAL = 'manual',
-  GPIO = 'gpio'  // Generic GPIO (fallback)
+  AI = 'ai'
 }
 
 export interface ISentinel {

@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { ISentinel, SentinelStatus, TriggerType, Location } from '../types';
+import { ISentinel, SentinelStatus, Location } from '../types';
 
-export interface SentinelDocument extends ISentinel, Document { }
+export interface SentinelDocument extends ISentinel, Document {}
 
 const LocationSchema = new Schema<Location>(
   {
@@ -57,7 +57,7 @@ const SentinelSchema = new Schema<SentinelDocument>(
       type: String,
       trim: true,
       validate: {
-        validator: function (v: string) {
+        validator: function(v: string) {
           if (!v) return true; // Optional field
           // Basic IP validation (IPv4)
           return /^(\d{1,3}\.){3}\d{1,3}$/.test(v);
@@ -73,7 +73,7 @@ const SentinelSchema = new Schema<SentinelDocument>(
     triggerType: {
       type: String,
       trim: true,
-      enum: Object.values(TriggerType)
+      enum: ['gpio', 'microphone', 'remote', 'ai']
     }
   },
   {
@@ -89,7 +89,7 @@ SentinelSchema.index({ status: 1 });
 SentinelSchema.index({ lastSeen: -1 });
 
 // Virtual to check if sentinel is online (seen in last 5 minutes)
-SentinelSchema.virtual('isOnline').get(function () {
+SentinelSchema.virtual('isOnline').get(function() {
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
   return this.lastSeen > fiveMinutesAgo;
 });
