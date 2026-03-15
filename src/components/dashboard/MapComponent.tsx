@@ -30,11 +30,8 @@ const getTriggerBadgeHTML = (triggerType?: string) => {
   if (!triggerType) return '';
 
   const mapping: Record<string, { label: string; bgColor: string; textColor: string; icon: string }> = {
-    pir: { label: 'PIR', bgColor: 'rgba(255, 228, 230, 0.2)', textColor: '#e11d48', icon: '⚡' },
-    motion: { label: 'Motion', bgColor: 'rgba(255, 228, 230, 0.2)', textColor: '#e11d48', icon: '⚡' },
-    vibration: { label: 'Vibration', bgColor: 'rgba(254, 243, 199, 0.2)', textColor: '#d97706', icon: '📊' },
     sound: { label: 'Sound', bgColor: 'rgba(224, 242, 254, 0.2)', textColor: '#0284c7', icon: '🔊' },
-    gpio: { label: 'GPIO', bgColor: 'rgba(220, 252, 231, 0.2)', textColor: '#15803d', icon: '💻' },
+    microphone: { label: 'Microphone', bgColor: 'rgba(224, 242, 254, 0.2)', textColor: '#0284c7', icon: '🔊' },
     location: { label: 'Location', bgColor: 'rgba(224, 231, 255, 0.2)', textColor: '#4338ca', icon: '📍' },
   };
 

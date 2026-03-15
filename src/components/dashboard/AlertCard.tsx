@@ -24,6 +24,11 @@ const threatIcons: Record<string, any> = {
   truck: Truck,
   motorcycle: Bike,
   bus: Bus,
+  excavator: Construction,
+  chainsaw: Construction,
+  speech: User,
+  animal: AlertTriangle,
+  unknown: AlertTriangle,
 };
 
 const getTimeAgo = (timestamp: string) => {

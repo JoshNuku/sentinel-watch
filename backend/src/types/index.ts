@@ -18,11 +18,15 @@ export enum ThreatType {
   CAR = 'car',
   TRUCK = 'truck',
   MOTORCYCLE = 'motorcycle',
-  BUS = 'bus'
+  BUS = 'bus',
+  EXCAVATOR = 'excavator',
+  CHAINSAW = 'chainsaw',
+  SPEECH = 'speech',
+  ANIMAL = 'animal',
+  UNKNOWN = 'unknown'
 }
 
 export enum TriggerType {
-  GPIO = 'gpio',
   MICROPHONE = 'microphone',
   REMOTE = 'remote',
   AI = 'ai'
@@ -48,5 +52,5 @@ export interface IAlert {
   isVerified: boolean;
   imageUrl?: string;
   triggerType?: TriggerType;
-  triggeredSensors?: string[]; // e.g. ['PIR','VIBRATION','SOUND'] or gpio pins
+  triggeredSensors?: string[]; // e.g. ['SOUND']
 }

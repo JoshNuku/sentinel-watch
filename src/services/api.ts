@@ -34,20 +34,20 @@ export interface Sentinel {
   lastSeen: string;
   ipAddress?: string;
   streamUrl?: string; // Direct video stream URL
-  triggerType?: 'gpio' | 'microphone' | 'remote' | 'ai';
+  triggerType?: 'microphone' | 'remote' | 'ai';
   triggeredSensors?: string[];
 }
 
 export interface Alert {
   _id: string;
   sentinelId: string;
-  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person' | 'person' | 'car' | 'truck' | 'motorcycle' | 'bus';
+  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person' | 'person' | 'car' | 'truck' | 'motorcycle' | 'bus' | 'excavator' | 'chainsaw' | 'speech' | 'animal' | 'unknown' | 'Vehicle';
   confidence: number;
   location: Location;
   timestamp: string;
   isVerified: boolean;
   imageUrl?: string;  // URL to saved alert image
-  triggerType?: 'gpio' | 'microphone' | 'remote' | 'ai';
+  triggerType?: 'microphone' | 'remote' | 'ai';
   triggeredSensors?: string[];
 }
 

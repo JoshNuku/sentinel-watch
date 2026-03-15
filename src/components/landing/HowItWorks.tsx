@@ -6,7 +6,7 @@ const steps = [
     number: "01",
     icon: Radio,
     title: "Detect",
-    description: "Ground vibration sensors and acoustic detectors trigger the surveillance system when unusual activity is detected."
+    description: "Acoustic anomaly detectors trigger the surveillance system when unusual activity is detected."
   },
   {
     number: "02",

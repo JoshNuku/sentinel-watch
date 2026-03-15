@@ -32,9 +32,8 @@ DEVICE_ID = "ORN-001"
 BACKEND_URL = "http://192.168.1.100:5000/api"  # CHANGE TO YOUR SERVER IP
 VIDEO_PORT = 8080  # Match frontend expectation
 
-# GPIO Pins (BCM Mode)
-PIR_PIN = 17        # Motion sensor
-VIBRATION_PIN = 27  # Seismic sensor
+# GPIO Pins
+# (Hardware triggers removed, using vision/audio triggers)
 
 # AI Model
 MODEL_PATH = "orion_detector.ms" if MINDSPORE_AVAILABLE else "orion_detector.onnx"
@@ -425,9 +424,7 @@ def main():
     """Main sentinel control logic"""
     
     # Initialize hardware
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(PIR_PIN, GPIO.IN)
-    GPIO.setup(VIBRATION_PIN, GPIO.IN)
+    # GPIO.setmode(GPIO.BCM) - removed in favor of acoustic-first architecture
     
     # Initialize modules
     gps = GPSTracker()
@@ -457,14 +454,12 @@ def main():
             
             # ==================== SENTRY MODE ====================
             if state.mode == "SENTRY":
-                # Check sensors for triggers
-                pir_triggered = GPIO.input(PIR_PIN)
-                vibration_triggered = GPIO.input(VIBRATION_PIN)
-                
-                if pir_triggered or vibration_triggered:
-                    logger.warning("🚨 TRIGGER DETECTED! Switching to INTRUDER MODE")
-                    trigger_type = "PIR" if pir_triggered else "VIBRATION"
-                    logger.info(f"Trigger source: {trigger_type}")
+                # With hardware sensors removed, we could rely on intermittent camera scans or 
+                # await audio-first triggers. For this standalone demo stub, 
+                # we'll simulate a scan trigger every 30 seconds.
+                if current_time - last_heartbeat > 30:
+                    logger.warning("🚨 (Simulated Audio Pipeline) TRIGGER DETECTED! Switching to INTRUDER MODE")
+                    trigger_type = "microphone"
                     
                     # Switch to INTRUDER mode
                     state.mode = "INTRUDER"
@@ -522,7 +517,6 @@ def main():
     finally:
         # Cleanup
         release_camera()
-        GPIO.cleanup()
         logger.info("Shutdown complete")
 
 # ============================================================================

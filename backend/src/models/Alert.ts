@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { IAlert, ThreatType, Location } from '../types';
+import { IAlert, ThreatType, TriggerType, Location } from '../types';
 
 export interface AlertDocument extends IAlert, Document {}
 
@@ -66,7 +66,8 @@ const AlertSchema = new Schema<AlertDocument>(
     ,
     triggerType: {
       type: String,
-      trim: true
+      trim: true,
+      enum: Object.values(TriggerType)
     },
     triggeredSensors: {
       type: [String],

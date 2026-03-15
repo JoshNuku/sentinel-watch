@@ -4,11 +4,8 @@ import { Zap, Activity, Volume2, Cpu, MapPin } from 'lucide-react';
 type IconComp = React.ComponentType<any>;
 
 const mapping: Record<string, { icon: IconComp; label: string; classes: string }> = {
-  pir: { icon: Zap, label: 'PIR', classes: 'bg-rose-50 text-rose-600' },
-  motion: { icon: Zap, label: 'Motion', classes: 'bg-rose-50 text-rose-600' },
-  vibration: { icon: Activity, label: 'Vibration', classes: 'bg-amber-50 text-amber-600' },
   sound: { icon: Volume2, label: 'Sound', classes: 'bg-sky-50 text-sky-600' },
-  gpio: { icon: Cpu, label: 'GPIO', classes: 'bg-green-50 text-green-700' },
+  microphone: { icon: Volume2, label: 'Microphone', classes: 'bg-sky-50 text-sky-600' },
   location: { icon: MapPin, label: 'Location', classes: 'bg-indigo-50 text-indigo-700' },
 };
 

@@ -80,7 +80,7 @@ class SentinelClient:
         Send threat detection alert to backend
         
         Args:
-            threat_type: "Excavator", "Water Pump", "Dredge", or "Person"
+            threat_type: "excavator", "person", "car", or "speech" (lowercase)
             confidence: 0.0 to 1.0 (e.g., 0.95 = 95%)
             threat_location: Optional specific threat location, defaults to device location
         """
@@ -158,12 +158,12 @@ def simulate_detection():
     # Example alerts
     threats = [
         {
-            "type": "Excavator",
+            "type": "excavator",
             "confidence": 0.95,
             "location": {"lat": 1.3521, "lng": 103.8198}
         },
         {
-            "type": "Water Pump",
+            "type": "car",
             "confidence": 0.87,
             "location": {"lat": 1.3522, "lng": 103.8199}
         }

@@ -32,11 +32,21 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { SensorChip, TriggerBadge } from "@/lib/sensorIcons";
 
-const threatIcons = {
+const threatIcons: Record<string, any> = {
+  // Legacy
   Excavator: Construction,
   'Dump-Truck': Truck,
   'Water Pump': Droplets,
   Person: Radio,
+  // New
+  person: Radio,
+  car: Truck,
+  truck: Truck,
+  motorcycle: Truck,
+  bus: Truck,
+  excavator: Construction,
+  chainsaw: Construction,
+  speech: Radio,
 };
 
 const Alerts = () => {
@@ -210,10 +220,16 @@ const Alerts = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Threats</SelectItem>
-              <SelectItem value="Excavator">Excavator</SelectItem>
-              <SelectItem value="Dump-Truck">Dump Truck</SelectItem>
-              <SelectItem value="Water Pump">Water Pump</SelectItem>
-              <SelectItem value="Person">Person</SelectItem>
+              <SelectItem value="person">Person</SelectItem>
+              <SelectItem value="car">Car</SelectItem>
+              <SelectItem value="truck">Truck</SelectItem>
+              <SelectItem value="motorcycle">Motorcycle</SelectItem>
+              <SelectItem value="bus">Bus</SelectItem>
+              <SelectItem value="excavator">Excavator</SelectItem>
+              <SelectItem value="chainsaw">Chainsaw</SelectItem>
+              <SelectItem value="speech">Speech</SelectItem>
+              <SelectItem value="animal">Animal</SelectItem>
+              <SelectItem value="unknown">Unknown</SelectItem>
             </SelectContent>
           </Select>
           <Button 

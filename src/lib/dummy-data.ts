@@ -12,7 +12,7 @@ export interface Sentinel {
 export interface Alert {
   id: string;
   sentinelId: string;
-  threatType: 'Excavator' | 'Water Pump' | 'Vehicle';
+  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person' | 'person' | 'car' | 'truck' | 'motorcycle' | 'bus' | 'excavator' | 'chainsaw' | 'speech' | 'animal' | 'unknown' | 'Vehicle';
   timestamp: string;
   location: {
     lat: number;
@@ -30,7 +30,7 @@ export const sentinels: Sentinel[] = [
 
 export const alerts: Alert[] = [
   { id: 'ALERT-001', sentinelId: 'ORN-002', threatType: 'Excavator', timestamp: '2023-10-27T10:04:30Z', location: { lat: 5.5560, lng: -0.2010 }, isVerified: false },
-  { id: 'ALERT-002', sentinelId: 'ORN-007', threatType: 'Vehicle', timestamp: '2023-10-27T08:30:00Z', location: { lat: 5.6100, lng: -0.1800 }, isVerified: true },
+  { id: 'ALERT-002', sentinelId: 'ORN-007', threatType: 'car', timestamp: '2023-10-27T08:30:00Z', location: { lat: 5.6100, lng: -0.1800 }, isVerified: true },
 ];
 
 export const getTimeAgo = (timestamp: string): string => {
