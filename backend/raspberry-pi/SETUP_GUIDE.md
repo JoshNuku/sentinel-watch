@@ -6,8 +6,6 @@
 
 - **Raspberry Pi 4B** (4GB RAM recommended)
 - **Camera Module V2** or USB webcam
-- **PIR Motion Sensor** (HC-SR501)
-- **Vibration Sensor** (SW-420)
 - **MicroSD Card** (32GB+ Class 10)
 - **Power Supply** (5V 3A USB-C)
 
@@ -24,15 +22,6 @@
 Raspberry Pi GPIO (BCM Mode)
 ============================
 
-PIR Sensor:
-- VCC  → 5V (Pin 2 or 4)
-- GND  → GND (Pin 6)
-- OUT  → GPIO 17 (Pin 11)
-
-Vibration Sensor:
-- VCC  → 3.3V (Pin 1)
-- GND  → GND (Pin 9)
-- DO   → GPIO 27 (Pin 13)
 
 GPS Module (Optional):
 - VCC  → 5V
@@ -143,9 +132,6 @@ Edit `sentinel_main.py`:
 DEVICE_ID = "ORN-001"  # Unique ID for this sentinel
 BACKEND_URL = "http://YOUR_SERVER_IP:5000/api"
 
-# Line 30-31: Verify GPIO pins match your wiring
-PIR_PIN = 17
-VIBRATION_PIN = 27
 
 # Line 34: Set model path
 MODEL_PATH = "orion_detector.onnx"  # or .ms for MindSpore
@@ -208,28 +194,6 @@ cap.release()
 EOF
 ```
 
-### 4. Test Sensors
-
-```python
-# test_sensors.py
-import RPi.GPIO as GPIO
-import time
-
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(17, GPIO.IN)  # PIR
-GPIO.setup(27, GPIO.IN)  # Vibration
-
-print("Testing sensors (Ctrl+C to exit)...")
-try:
-    while True:
-        if GPIO.input(17):
-            print("🚶 PIR: Motion detected!")
-        if GPIO.input(27):
-            print("💥 Vibration detected!")
-        time.sleep(0.5)
-except KeyboardInterrupt:
-    GPIO.cleanup()
-```
 
 ## Running the Sentinel
 
@@ -349,21 +313,6 @@ v4l2-ctl --list-devices
 # Try different camera index (0, 1, 2...)
 ```
 
-### Sensors Not Triggering
-
-```bash
-# Check GPIO state
-gpio readall
-
-# Test with LED
-python3 << EOF
-import RPi.GPIO as GPIO
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(17, GPIO.IN)
-print("PIR state:", GPIO.input(17))
-GPIO.cleanup()
-EOF
-```
 
 ### AI Model Not Loading
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Project ORION - Sentinel Device Main Script
-Raspberry Pi 4B with Camera, PIR, Vibration Sensor
+Raspberry Pi 4B with Camera
 AI-Powered Anti-Illegal Mining Surveillance
 """
 

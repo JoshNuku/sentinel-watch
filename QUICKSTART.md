@@ -138,7 +138,7 @@ You should see:
 ┌─────────────────────────────────────────────────────────┐
 │              Raspberry Pi Sentinels                     │
 │  - Python script running on each device                 │
-│  - PIR + Vibration sensors                              │
+│  - Camera + AI inference                                │
 │  - Camera + AI inference                                │
 │  - Video streaming (Port 8080)                          │
 │  - Reports to backend API                               │
