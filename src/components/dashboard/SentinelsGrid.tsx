@@ -14,9 +14,9 @@ interface Props {
 
 const SentinelsGrid: React.FC<Props> = ({ sentinels, onFocus, onViewStream }) => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
       {sentinels.map((s) => (
-        <div key={s._id} className="glass rounded-xl p-4 flex flex-col justify-between h-40">
+        <div key={s._id} className="glass rounded-xl p-6 flex flex-col justify-between min-h-[220px] min-w-[320px] shadow-lg">
           <div>
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -59,12 +59,12 @@ const SentinelsGrid: React.FC<Props> = ({ sentinels, onFocus, onViewStream }) =>
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => onFocus && onFocus(s)}>
+          <div className="mt-6 flex items-center gap-3">
+            <Button variant="outline" className="flex-1 text-base py-3" onClick={() => onFocus && onFocus(s)}>
               Focus
             </Button>
             <Button
-              className="px-3 bg-emerald-500 text-white hover:bg-emerald-600"
+              className="px-4 py-3 bg-emerald-500 text-white text-base hover:bg-emerald-600"
               onClick={() => {
                 if (onFocus) onFocus(s);
                 if (onViewStream) onViewStream(s);
