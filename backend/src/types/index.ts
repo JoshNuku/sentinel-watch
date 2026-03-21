@@ -18,7 +18,10 @@ export enum ThreatType {
   CAR = 'car',
   TRUCK = 'truck',
   MOTORCYCLE = 'motorcycle',
-  BUS = 'bus'
+  BUS = 'bus',
+  CHAINSAW = 'chainsaw',
+  EXCAVATOR = 'excavator',
+  SPEECH = 'speech'
 }
 
 export enum TriggerType {

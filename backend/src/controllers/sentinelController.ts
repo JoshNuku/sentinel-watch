@@ -32,6 +32,29 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
       triggerType
     } = req.body;
 
+    // Helper: ensure ngrok stream URLs end with /stream
+    const sanitizeStreamUrl = (url?: string | null): string | undefined => {
+      if (!url) return undefined;
+      try {
+        const parsed = new URL(url);
+        // Only force /stream for ngrok hostnames (covers ngrok.* domains)
+        if (parsed.hostname.includes('ngrok')) {
+          // normalize pathname and append '/stream' if missing
+          const cleanPath = parsed.pathname.replace(/\/+$/g, '');
+          if (!cleanPath.endsWith('/stream')) {
+            parsed.pathname = (cleanPath === '/' || cleanPath === '') ? '/stream' : `${cleanPath}/stream`;
+            return parsed.toString();
+          }
+        }
+        return url;
+      } catch (e) {
+        // If URL parsing fails, return original value (let schema validation handle it)
+        return url;
+      }
+    };
+
+    const cleanedStreamUrl = sanitizeStreamUrl(streamUrl);
+
     // Validation
     if (!deviceId) {
       res.status(400).json({
@@ -59,7 +82,7 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
       sentinel.lastSeen = new Date();
       sentinel.ipAddress = ipAddress ?? sentinel.ipAddress;
       sentinel.status = status ?? SentinelStatus.ACTIVE;
-      sentinel.streamUrl = streamUrl ?? sentinel.streamUrl;
+      sentinel.streamUrl = cleanedStreamUrl ?? sentinel.streamUrl;
       sentinel.triggerType = triggerType ?? sentinel.triggerType;
 
       await sentinel.save();
@@ -80,7 +103,7 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
         lastSeen: new Date(),
         ipAddress,
         status: status ?? SentinelStatus.ACTIVE,
-        streamUrl,
+        streamUrl: cleanedStreamUrl,
         triggerType
       });
 
