@@ -60,8 +60,50 @@
   }
 
   .dark {
-    --background: 220 20% 6%;
-    --foreground: 0 0% 98%;
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+
+    --primary: 142 76% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 10%;
+
+    --success: 142 76% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 142 76% 40%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 224 71% 4%;
+    --sidebar-foreground: 213 31% 91%;
+    --sidebar-primary: 142 76% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 216 34% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 216 34% 17%;
+    --sidebar-ring: 142 76% 40%;
   }
 }
 
@@ -124,7 +166,7 @@
 
 /* Leaflet overrides - contain z-index within map */
 .leaflet-container {
-  background: hsl(0 0% 98%) !important;
+  background: hsl(var(--background)) !important;
   font-family: 'Outfit', sans-serif !important;
   isolation: isolate;
 }
@@ -153,23 +195,24 @@
 }
 
 .leaflet-popup-content-wrapper {
-  background: hsl(0 0% 100%) !important;
-  color: hsl(220 20% 10%) !important;
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
   border-radius: 0.75rem !important;
-  border: 1px solid hsl(220 14% 90%) !important;
-  box-shadow: 0 4px 12px hsl(0 0% 0% / 0.1) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 4px 12px hsl(0 0% 0% / 0.5) !important;
 }
 
 .leaflet-popup-tip {
-  background: hsl(0 0% 100%) !important;
+  background: hsl(var(--card)) !important;
 }
 
 .leaflet-control-zoom a {
-  background: hsl(0 0% 100%) !important;
-  color: hsl(220 20% 10%) !important;
-  border-color: hsl(220 14% 90%) !important;
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+  border-color: hsl(var(--border)) !important;
 }
 
 .leaflet-control-zoom a:hover {
-  background: hsl(220 14% 96%) !important;
+  background: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
 }

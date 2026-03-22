@@ -320,6 +320,14 @@ export const healthCheck = async (): Promise<{ success: boolean; uptime: number 
  * Uses backend proxy to bypass ngrok warning page
  */
 export const getStreamUrl = (sentinel: Sentinel): string | null => {
+  // EXPERIMENTAL: Bypass ngrok completely if on the same local network
+  const useLocalStream = import.meta.env.VITE_USE_LOCAL_STREAM === 'true';
+  
+  if (useLocalStream && sentinel.ipAddress) {
+    console.log(`📡 Using direct local IP stream for ${sentinel.deviceId}: ${sentinel.ipAddress}`);
+    return `http://${sentinel.ipAddress}:8080/stream`;
+  }
+
   // Use backend proxy for ngrok URLs
   if (sentinel.streamUrl && sentinel.streamUrl.includes('ngrok')) {
     return `${API_BASE_URL}/stream/${sentinel.deviceId}`;
@@ -330,7 +338,7 @@ export const getStreamUrl = (sentinel: Sentinel): string | null => {
     return sentinel.streamUrl;
   }
 
-  // If ipAddress is available, construct stream URL
+  // If ipAddress is available as fallback
   if (sentinel.ipAddress) {
     return `http://${sentinel.ipAddress}:8080/stream`;
   }

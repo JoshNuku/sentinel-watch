@@ -23,6 +23,11 @@ export interface SentinelStatusUpdateEvent {
   status: 'active' | 'inactive' | 'alert';
 }
 
+export interface StartStreamEvent {
+  deviceId: string;
+  streamUrl: string;
+}
+
 class WebSocketService {
   private socket: Socket | null = null;
   private reconnectAttempts = 0;
@@ -156,6 +161,22 @@ class WebSocketService {
     // Return unsubscribe function
     return () => {
       this.socket?.off('sentinel-status-update', callback);
+    };
+  }
+
+  /**
+   * Subscribe to start-stream events (emitted by backend when alert has a stored streamUrl)
+   */
+  onStartStream(callback: (data: StartStreamEvent) => void): () => void {
+    if (!this.socket) {
+      console.warn('WebSocket not connected. Call connect() first.');
+      return () => {};
+    }
+
+    this.socket.on('start-stream', callback);
+
+    return () => {
+      this.socket?.off('start-stream', callback);
     };
   }
 

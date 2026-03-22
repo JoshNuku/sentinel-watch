@@ -94,6 +94,7 @@ const LiveMap = () => {
           sentinels={sentinels} 
           selectedSentinel={selectedSentinel}
           onSentinelSelect={(s) => navigate('/dashboard', { state: { sentinelId: s.deviceId } })}
+          onViewLiveFeed={(s) => navigate('/dashboard', { state: { sentinelId: s.deviceId, autoStartStream: true } })}
           onStopFeed={() => setSelectedSentinel(null)}
           loading={loading}
         />

@@ -138,6 +138,17 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
     await sentinel.save();
     console.log('✅ Sentinel status updated to:', sentinel.status);
 
+    // If a stream URL is already stored for this sentinel, use it — emit a
+    // `start-stream` Socket.io event so dashboards or other consumers can begin playback.
+    if (sentinel.streamUrl) {
+      console.log(`📡 Stream URL present for ${sentinel.deviceId}: ${sentinel.streamUrl} — emitting start-stream`);
+      if (io) {
+        io.emit('start-stream', { deviceId: sentinel.deviceId, streamUrl: sentinel.streamUrl });
+      }
+    } else {
+      console.log(`ℹ️ No streamUrl available in DB for ${sentinel.deviceId}`);
+    }
+
     // Step 2.5: Auto-reset sentinel status after 2 minutes
     // This prevents the "THREAT DETECTED" indicator from showing indefinitely
     setTimeout(async () => {

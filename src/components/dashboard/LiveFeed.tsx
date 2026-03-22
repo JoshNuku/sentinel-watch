@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Video, Signal, WifiOff, X, AlertCircle, Moon, Camera, Maximize, RefreshCw, Power } from "lucide-react";
+import { VideoOff, Signal, WifiOff, X, AlertCircle, Moon, Camera, Maximize, RefreshCw, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { getStreamUrl, sentinelAPI, alertAPI, type Sentinel } from "@/services/api";
 
 interface LiveFeedProps {
@@ -256,43 +257,25 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
     }
   };
 
-  // Take snapshot of current stream
-  const handleSnapshot = () => {
-    if (!imgRef.current || !sentinel) return;
-    
-    try {
-      // Create a canvas to capture the current frame
-      const canvas = document.createElement('canvas');
-      const img = imgRef.current;
-      canvas.width = img.naturalWidth || img.width;
-      canvas.height = img.naturalHeight || img.height;
-      
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        
-        // Convert to blob and download
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `${sentinel.deviceId}_snapshot_${new Date().getTime()}.jpg`;
-            link.click();
-            URL.revokeObjectURL(url);
-            console.log('📸 Snapshot saved');
-          }
-        }, 'image/jpeg', 0.95);
-      }
-    } catch (error) {
-      console.error('❌ Failed to take snapshot:', error);
-    }
-  };
+
 
   // Update stream URL when sentinel changes
   useEffect(() => {
-    // Cleanup previous sentinel's resources
     const previousSentinel = activatedSentinelRef.current;
+    const isSameDevice = sentinel && previousSentinel === sentinel.deviceId;
+
+    // If the same device is re-selected (e.g., new alert for current device)
+    // and we already have a stream running, don't reset anything — keep streaming.
+    if (isSameDevice && streamUrl && !imageError) {
+      console.log(`🔄 Same device ${sentinel.deviceId} re-selected, keeping active stream`);
+      // If the sentinel's status is 'alert', clear any user-stop flag so the stream isn't suppressed
+      if (sentinel.status === 'alert' && userStoppedDeviceRef.current === sentinel.deviceId) {
+        userStoppedDeviceRef.current = null;
+      }
+      return;
+    }
+
+    // Different device or no active stream — do a full reset
     cleanupTimers();
     setImageError(false);
     setImageLoaded(false);
@@ -311,15 +294,41 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
       deactivateSentinel(previousSentinel);
     }
     
-    // IMPORTANT: Do NOT auto-activate or auto-request streams here.
-    // Streams must be started only via explicit user action (Request Live Feed).
-    // Clear any existing stream URL when sentinel changes; manual request will set it.
-    setStreamUrl(null);
+    // Only auto-connect using a stored streamUrl if this is an explicit manual request,
+    // OR if the sentinel is currently in an active 'alert' state.
+    // Otherwise, we shouldn't auto-start just because a stale streamUrl is in the DB.
+    const shouldAutoStart = sentinel?.status === 'alert' || isManualRequested;
+
+    // If the incoming sentinel already has a streamUrl (e.g., from an alert event),
+    // use it directly instead of requiring a manual "Request Live Feed" click.
+    if (sentinel?.streamUrl && shouldAutoStart) {
+      // Clear user-stop flag for alert-triggered streams
+      if (sentinel.status === 'alert' && userStoppedDeviceRef.current === sentinel.deviceId) {
+        userStoppedDeviceRef.current = null;
+      }
+      // Don't auto-start if the user explicitly stopped this device
+      if (userStoppedDeviceRef.current !== sentinel.deviceId) {
+        console.log(`📹 Auto-connecting stream for ${sentinel.deviceId} using stored streamUrl`);
+        const url = getStreamUrl(sentinel);
+        if (url) {
+          setStreamUrl(url);
+          activatedSentinelRef.current = sentinel.deviceId;
+          startKeepAlive(sentinel.deviceId);
+        } else {
+          setStreamUrl(null);
+        }
+      } else {
+        setStreamUrl(null);
+      }
+    } else {
+      setStreamUrl(null);
+    }
 
     return () => {
       cleanupTimers();
     };
-  }, [sentinel?.deviceId, sentinel?.status, activateSentinel, deactivateSentinel, cleanupTimers, onStreamStateChange, imageError, sentinel]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentinel?.deviceId, sentinel?.status, sentinel?.streamUrl, isManualRequested, deactivateSentinel, cleanupTimers, onStreamStateChange, startKeepAlive]);
 
   // Determine whether to show threat overlay by fetching the latest alert for this sentinel
   useEffect(() => {
@@ -491,14 +500,14 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
                 {isReconnecting ? (
                   <RefreshCw className="h-6 w-6 text-primary animate-spin" />
                 ) : (
-                  <WifiOff className="h-6 w-6 text-destructive" />
+                  <VideoOff className="h-6 w-6 text-destructive" />
                 )}
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-semibold text-sm">{isReconnecting ? 'Reconnecting...' : 'Connection Lost'}</div>
-                    <div className="text-xs text-muted-foreground">{isReconnecting ? `Attempting to reconnect (attempt ${retryCount + 1}/10)` : `Unable to connect to ${sentinel.deviceId}`}</div>
+                    <div className="font-semibold text-sm">{isReconnecting ? 'Reconnecting...' : 'Feed Unavailable'}</div>
+                    <div className="text-xs text-muted-foreground">{isReconnecting ? `Attempting to connect (attempt ${retryCount + 1}/10)` : `No active video stream from ${sentinel.deviceId}`}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={handleManualReconnect} disabled={isReconnecting}>
@@ -529,7 +538,9 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
           <div className="absolute inset-0 bg-gradient-to-br from-secondary/50 to-background flex items-center justify-center z-10">
             <div className="text-center space-y-3">
               <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mx-auto" />
-              <p className="text-sm text-muted-foreground">Connecting to stream...</p>
+              <p className="text-sm text-muted-foreground">
+                {isDeactivating ? 'Disconnecting from stream...' : 'Connecting to stream...'}
+              </p>
             </div>
           </div>
         )}
@@ -537,7 +548,8 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
         {/* Video Stream */}
         <img
           ref={imgRef}
-          src={streamUrl}
+          src={streamUrl || undefined}
+          crossOrigin={streamUrl?.includes('action=stream') || streamUrl?.includes('192.168') ? undefined : "anonymous"}
           alt={`Live feed from ${sentinel.deviceId}`}
           className={`w-full h-full object-cover transition-opacity duration-300 ${
             imageLoaded ? 'opacity-100' : 'opacity-0'
@@ -577,11 +589,13 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
                       </div>
                     )}
         </div>
-        <div className="flex items-center gap-2">
+        
+        {/* Top Right Controls */}
+        <div className="absolute top-4 right-4 z-30 flex items-center gap-2 bg-background/60 backdrop-blur-sm px-2 py-1 rounded-md border border-border/50 shadow-sm">
           {sentinel && streamUrl && !imageError && (
             <>
               <Signal className="h-4 w-4 text-primary animate-pulse" />
-              <span className="text-xs text-primary font-medium">LIVE</span>
+              <span className="text-xs text-primary font-bold tracking-wider mr-1">LIVE</span>
             </>
           )}
           {sentinel && onClose && (
@@ -589,9 +603,9 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-8 w-8 p-0 ml-2"
+              className="h-6 w-6 p-0 rounded-full hover:bg-destructive/20 hover:text-destructive transition-colors"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
@@ -601,20 +615,13 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
       };
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full w-full">
       {renderContent()}
 
       {/* Action Buttons */}
       {sentinel && (streamUrl || isManualRequested) && !imageError && (
         <div className="flex gap-2 mt-4">
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            className="flex-1"
-            onClick={handleSnapshot}
-          >
-            Snapshot
-          </Button>
+
           <Button 
             variant="outline" 
             size="sm" 

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { sentinelAPI, alertAPI, type Sentinel } from "@/services/api";
+import { sentinelAPI, alertAPI, getStreamUrl, type Sentinel } from "@/services/api";
 import { sentinels as dummySentinels } from "@/lib/dummy-data";
-import { wsService, type NewAlertEvent } from "@/services/websocket";
+import { wsService, type NewAlertEvent, type StartStreamEvent } from "@/services/websocket";
 import StatCard from "@/components/dashboard/StatCard";
 import MapComponent from "@/components/dashboard/MapComponent";
 import LiveFeed from "@/components/dashboard/LiveFeed";
@@ -17,6 +17,7 @@ const Dashboard = () => {
   const [selectedSentinel, setSelectedSentinel] = useState<Sentinel | null>(null);
   const [isStreamActive, setIsStreamActive] = useState(false);
   const [manualRequestingDevice, setManualRequestingDevice] = useState<string | null>(null);
+  const [focusTrigger, setFocusTrigger] = useState(0);
   const [alertStats, setAlertStats] = useState({
     total: 0,
     last24Hours: 0
@@ -25,8 +26,9 @@ const Dashboard = () => {
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const { toast } = useToast();
-
   
+  // last fetch timestamp to throttle background calls
+  const lastFetchRef = useRef<number>(0);
 
   // Fetch sentinels from backend
   const fetchSentinels = useCallback(async () => {
@@ -81,8 +83,6 @@ const Dashboard = () => {
     }
   }, [selectedSentinel, sentinels.length]);
 
-  // last fetch timestamp to throttle background calls
-  const lastFetchRef = useRef<number>(0);
 
   // Fetch alert statistics
   const fetchAlertStats = useCallback(async () => {
@@ -98,6 +98,28 @@ const Dashboard = () => {
       console.error("Failed to fetch alert stats:", err);
     }
   }, []);
+
+  // Shared handler for requesting a live stream (used by Grid and Map)
+  const handleViewStream = useCallback(async (s: Sentinel) => {
+    setSelectedSentinel(s);
+    setManualRequestingDevice(s.deviceId);
+    try {
+      const res = await sentinelAPI.requestStream(s.deviceId);
+      if (res && res.success && res.data?.streamUrl) {
+        setSelectedSentinel(prev => prev ? { ...prev, streamUrl: res.data!.streamUrl } : prev);
+        setIsStreamActive(true);
+        fetchSentinels();
+        toast({ title: 'Stream started', description: `${s.deviceId} stream available` });
+      } else if (res && res.success) {
+        toast({ title: 'Stream requested', description: `Waiting for ${s.deviceId} to publish stream`, variant: 'default' });
+      }
+    } catch (err) {
+      console.error('Failed to request stream:', err);
+      toast({ title: 'Stream request failed', description: 'Unable to start stream', variant: 'destructive' });
+    } finally {
+      setTimeout(() => setManualRequestingDevice(null), 5000);
+    }
+  }, [fetchSentinels, toast]);
 
   // Setup WebSocket connection and listeners
   useEffect(() => {
@@ -126,6 +148,15 @@ const Dashboard = () => {
       if (data.sentinel) {
         console.log('📡 Selecting alerted sentinel with fresh data:', data.sentinel.deviceId);
         setSelectedSentinel(data.sentinel);
+
+        // If the sentinel has a streamUrl, auto-start the stream without requiring manual request
+        if (data.sentinel.streamUrl) {
+          console.log('📹 Auto-starting stream from alert for', data.sentinel.deviceId);
+          setManualRequestingDevice(data.sentinel.deviceId);
+          setIsStreamActive(true);
+          // Clear the requesting flag after a short delay so LiveFeed picks up the URL
+          setTimeout(() => setManualRequestingDevice(null), 3000);
+        }
       }
 
       // Refresh data in background (throttled)
@@ -166,11 +197,35 @@ const Dashboard = () => {
       );
     });
 
+    // Subscribe to start-stream events (backend sends this when alert has a stored streamUrl)
+    const unsubscribeStartStream = wsService.onStartStream((data: StartStreamEvent) => {
+      console.log('📹 start-stream received:', data);
+
+      // Update the sentinel's streamUrl in our local list
+      setSentinels(prev => prev.map(s =>
+        s.deviceId === data.deviceId
+          ? { ...s, streamUrl: data.streamUrl }
+          : s
+      ));
+
+      // If this sentinel is currently selected, update it and auto-start the stream
+      setSelectedSentinel(prev => {
+        if (prev?.deviceId === data.deviceId) {
+          setManualRequestingDevice(data.deviceId);
+          setIsStreamActive(true);
+          setTimeout(() => setManualRequestingDevice(null), 3000);
+          return { ...prev, streamUrl: data.streamUrl };
+        }
+        return prev;
+      });
+    });
+
     // Cleanup on unmount
     return () => {
       unsubscribeAlerts();
       unsubscribeVerified();
       unsubscribeStatusUpdate();
+      unsubscribeStartStream();
       clearInterval(checkConnection);
     };
   }, [fetchSentinels, fetchAlertStats, toast]);
@@ -190,19 +245,27 @@ const Dashboard = () => {
   }, [fetchSentinels, fetchAlertStats]);
 
   // Restore selection when navigated from LiveMap or from previous tab (sessionStorage)
+  const hasRestoredStreamInit = useRef(false);
+
   useEffect(() => {
     if (sentinels.length === 0) return;
 
-    const state = location.state as { sentinelId?: string } | null;
+    const state = location.state as { sentinelId?: string, autoStartStream?: boolean } | null;
     const targetId = state?.sentinelId || sessionStorage.getItem('selectedSentinelId');
 
     if (targetId) {
       const match = sentinels.find(s => s.deviceId === targetId);
       if (match) {
         setSelectedSentinel(match);
+
+        // Auto-start stream if navigated from LiveMap with that intent
+        if (state?.autoStartStream && !hasRestoredStreamInit.current) {
+          hasRestoredStreamInit.current = true;
+          handleViewStream(match);
+        }
       }
     }
-  }, [sentinels, location.state]);
+  }, [sentinels, location.state, handleViewStream]);
 
   // Persist selection for tab switches
   useEffect(() => {
@@ -277,56 +340,41 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* Main Content Grid */}
+      {/* Sentinels Horizontal List */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold tracking-tight">Active Devices</h2>
+        <SentinelsGrid
+          sentinels={sentinels}
+          onFocus={(s) => {
+            setSelectedSentinel(s);
+            setFocusTrigger(f => f + 1);
+          }}
+          onViewStream={handleViewStream}
+        />
+      </div>
+
+      {/* Map & Live Feed */}
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* Left: Map + Alerts stacked */}
-        <div className="lg:col-span-3 flex flex-col gap-6">
-          <div className="h-[440px]">
-            <MapComponent 
-              sentinels={sentinels}
-              selectedSentinel={selectedSentinel}
-              onSentinelSelect={setSelectedSentinel}
-              onStopFeed={() => {
-                setSelectedSentinel(null);
-                setIsStreamActive(false);
-              }}
-              loading={loading}
-              isStreamActive={isStreamActive}
-            />
-          </div>
-          <div className="flex-1 min-h-[220px]">
-            <SentinelsGrid
-              sentinels={sentinels}
-              onFocus={(s) => setSelectedSentinel(s)}
-              onViewStream={async (s) => {
-                setSelectedSentinel(s);
-                setManualRequestingDevice(s.deviceId);
-                try {
-                  const res = await sentinelAPI.requestStream(s.deviceId);
-                  if (res && res.success && res.data?.streamUrl) {
-                    // update selected sentinel with returned streamUrl so LiveFeed can use it
-                    setSelectedSentinel(prev => prev ? { ...prev, streamUrl: res.data!.streamUrl } : prev);
-                    setIsStreamActive(true);
-                    fetchSentinels();
-                    toast({ title: 'Stream started', description: `${s.deviceId} stream available` });
-                  } else if (res && res.success) {
-                    // success but no streamUrl yet — backend is polling; notify user
-                    toast({ title: 'Stream requested', description: `Waiting for ${s.deviceId} to publish stream`, variant: 'default' });
-                  }
-                } catch (err) {
-                  console.error('Failed to request stream:', err);
-                  toast({ title: 'Stream request failed', description: 'Unable to start stream', variant: 'destructive' });
-                } finally {
-                  // clear requesting flag; LiveFeed will still show loading if it set internal flag or other flows
-                  setTimeout(() => setManualRequestingDevice(null), 5000);
-                }
-              }}
-            />
-          </div>
+        <div id="map-container" className="lg:col-span-3 h-[480px]">
+          <MapComponent 
+            sentinels={sentinels}
+            selectedSentinel={selectedSentinel}
+            onSentinelSelect={(s) => {
+              setSelectedSentinel(s);
+              setFocusTrigger(f => f + 1);
+            }}
+            onStopFeed={() => {
+              setSelectedSentinel(null);
+              setIsStreamActive(false);
+            }}
+            onViewLiveFeed={handleViewStream}
+            loading={loading}
+            isStreamActive={isStreamActive}
+            focusTrigger={focusTrigger}
+          />
         </div>
 
-        {/* Right: Full-height Live Feed */}
-        <div className="lg:col-span-2 h-[440px]">
+        <div id="feed-container" className="lg:col-span-2 h-[480px]">
           <LiveFeed 
             sentinel={selectedSentinel}
             externalManualRequest={manualRequestingDevice === selectedSentinel?.deviceId}

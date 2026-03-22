@@ -11,6 +11,7 @@ interface MapComponentProps {
   onViewLiveFeed?: (sentinel: Sentinel) => void;
   onStopFeed?: (sentinel: Sentinel) => void;
   isStreamActive?: boolean; // Track if stream is actually active
+  focusTrigger?: number;
 }
 
 const getMarkerColor = (status: Sentinel["status"]) => {
@@ -68,7 +69,7 @@ const createCustomIcon = (status: Sentinel["status"], isSelected: boolean = fals
   });
 };
 
-const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, onViewLiveFeed, onStopFeed, isStreamActive = false }: MapComponentProps) => {
+const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, onViewLiveFeed, onStopFeed, isStreamActive = false, focusTrigger = 0 }: MapComponentProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
@@ -91,9 +92,9 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
 
     mapInstanceRef.current = map;
 
-    // Add dark-themed tile layer
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    // Add satellite tile layer (Esri World Imagery)
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       maxZoom: 19,
     }).addTo(map);
 
@@ -219,23 +220,35 @@ const MapComponent = ({ sentinels, selectedSentinel, onSentinelSelect, loading, 
               onStopFeed(sentinel);
             } else {
               // Select and start viewing feed
-              onSentinelSelect(sentinel);
+              if (onViewLiveFeed) {
+                onViewLiveFeed(sentinel);
+              } else {
+                onSentinelSelect(sentinel);
+              }
             }
             map.closePopup();
+            // Scroll to video feed smoothly
+            setTimeout(() => {
+              document.getElementById('feed-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 50);
           };
         }
       });
     });
+  }, [sentinels, selectedSentinel, onSentinelSelect, isStreamActive, onStopFeed]);
 
-    // Pan to selected sentinel
-    if (selectedSentinel) {
+  // Explicit Map Focus/Re-center Effect
+  // Separated from markers so the map doesn't violently snap when data polls in the background
+  useEffect(() => {
+    if (mapInstanceRef.current && selectedSentinel && focusTrigger > 0) {
       const selectedLat = Number(selectedSentinel.location?.lat);
       const selectedLng = Number(selectedSentinel.location?.lng);
       if (Number.isFinite(selectedLat) && Number.isFinite(selectedLng)) {
-        map.setView([selectedLat, selectedLng], 13, { animate: true });
+        // Zoom deeply into the marker (level 18)
+        mapInstanceRef.current.setView([selectedLat, selectedLng], 18, { animate: true });
       }
     }
-  }, [sentinels, selectedSentinel, onSentinelSelect]);
+  }, [focusTrigger, selectedSentinel]);
 
   // (Popup button now calls onSentinelSelect directly)
 

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Sentinel } from '../models';
+import { Sentinel, Alert } from '../models';
 import { SentinelStatus } from '../types';
 
 /**
@@ -13,6 +13,56 @@ let io: SocketServer;
 
 export const setSentinelSocketIO = (socketServer: SocketServer): void => {
   io = socketServer;
+};
+
+/**
+ * Programmatic helper to request a Pi to create a public stream for a sentinel.
+ * Returns an object describing success and streamUrl when available.
+ */
+export const initiateStream = async (deviceId: string): Promise<{ success: boolean; streamUrl?: string; message?: string }> => {
+  try {
+    const sentinel = await Sentinel.findOne({ deviceId: deviceId.toUpperCase() });
+    if (!sentinel) return { success: false, message: 'Sentinel not found' };
+
+    // Determine base URL for control endpoints
+    let baseUrl: string | null = null;
+    if (sentinel.streamUrl) {
+      baseUrl = sentinel.streamUrl.replace('/stream', '');
+    } else if (sentinel.ipAddress) {
+      baseUrl = `http://${sentinel.ipAddress}:3000`;
+    }
+
+    if (!baseUrl) return { success: false, message: 'No known endpoint for sentinel' };
+
+    try {
+      await fetch(`${baseUrl}/control/request_stream`, {
+        method: 'POST',
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
+    } catch (fetchErr) {
+      // non-fatal
+      console.warn(`⚠ Failed to call Pi request_stream for ${deviceId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
+    }
+
+    // Poll DB for streamUrl to appear
+    const timeoutMs = 30000; // 30s
+    const pollInterval = 1500; // 1.5s
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const current = await Sentinel.findOne({ deviceId: deviceId.toUpperCase() });
+      if (current && current.streamUrl) {
+        return { success: true, streamUrl: current.streamUrl };
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+
+    return { success: false, message: 'Timed out waiting for sentinel to create stream URL' };
+  } catch (err) {
+    console.error('❌ Error in initiateStream:', err);
+    return { success: false, message: err instanceof Error ? err.message : 'Unknown error' };
+  }
 };
 
 /**
@@ -139,9 +189,7 @@ export const getAllSentinels = async (req: Request, res: Response): Promise<void
 
     // Build query
     const query: any = {};
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
 
     const sentinels = await Sentinel.find(query).sort({ lastSeen: -1 });
 
@@ -154,7 +202,7 @@ export const getAllSentinels = async (req: Request, res: Response): Promise<void
     });
   } catch (error) {
     console.error('❌ Error fetching sentinels:', error);
-    
+
     res.status(500).json({
       success: false,
       message: 'Failed to fetch sentinels',
@@ -174,31 +222,20 @@ export const getSentinelById = async (req: Request, res: Response): Promise<void
     const sentinel = await Sentinel.findOne({ deviceId: deviceId.toUpperCase() });
 
     if (!sentinel) {
-      res.status(404).json({
-        success: false,
-        message: `Sentinel ${deviceId} not found`
-      });
+      res.status(404).json({ success: false, message: `Sentinel ${deviceId} not found` });
       return;
     }
 
-    res.status(200).json({
-      success: true,
-      data: sentinel
-    });
+    res.status(200).json({ success: true, data: sentinel });
   } catch (error) {
     console.error('❌ Error fetching sentinel:', error);
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch sentinel',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch sentinel', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 /**
  * PATCH /api/sentinels/:deviceId/status
- * Update sentinel status manually (for dashboard)
+ * Update sentinel status manually (from dashboard)
  */
 export const updateSentinelStatus = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -207,7 +244,7 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
 
     // Build update object
     const updateData: any = { lastSeen: new Date() };
-    
+
     if (status) {
       if (!Object.values(SentinelStatus).includes(status)) {
         res.status(400).json({
@@ -218,17 +255,10 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
       }
       updateData.status = status;
     }
-    
-    if (location) {
-      updateData.location = location;
-    }
-    
-    if (batteryLevel !== undefined) {
-      updateData.batteryLevel = batteryLevel;
-    }
-    if (triggerType) {
-      updateData.triggerType = triggerType;
-    }
+
+    if (location) updateData.location = location;
+    if (batteryLevel !== undefined) updateData.batteryLevel = batteryLevel;
+    if (triggerType) updateData.triggerType = triggerType;
 
     const sentinel = await Sentinel.findOneAndUpdate(
       { deviceId: deviceId.toUpperCase() },
@@ -237,37 +267,25 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
     );
 
     if (!sentinel) {
-      res.status(404).json({
-        success: false,
-        message: `Sentinel ${deviceId} not found`
-      });
+      res.status(404).json({ success: false, message: `Sentinel ${deviceId} not found` });
       return;
     }
 
-    console.log(`\ud83d\udd04 Sentinel ${deviceId} status changed to ${status || 'unchanged'}`);
-    
+    console.log(`🔄 Sentinel ${deviceId} status changed to ${status || 'unchanged'}`);
+
     // Emit status update to connected dashboards
     if (io && status) {
       io.emit('sentinel-status-update', {
         deviceId: sentinel.deviceId,
-        status: sentinel.status
-        , triggerType: sentinel.triggerType
+        status: sentinel.status,
+        triggerType: sentinel.triggerType
       });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Sentinel status updated',
-      data: sentinel
-    });
+    res.status(200).json({ success: true, message: 'Sentinel status updated', data: sentinel });
   } catch (error) {
-    console.error('\u274c Error updating sentinel status:', error);
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update sentinel status',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.error('❌ Error updating sentinel status:', error);
+    res.status(500).json({ success: false, message: 'Failed to update sentinel status', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
@@ -280,6 +298,39 @@ export const updateSentinelStatusPut = async (req: Request, res: Response): Prom
   try {
     const { deviceId } = req.params;
     const { status, location, batteryLevel, triggerType } = req.body;
+
+    // Log incoming heartbeat for debugging
+    console.log(`📥 Heartbeat PUT /api/sentinels/${deviceId}/status - body:`, JSON.stringify(req.body));
+
+    // Basic validation: ensure location has numeric lat/lng when provided
+    if (location && (typeof location.lat !== 'number' || typeof location.lng !== 'number')) {
+      console.error('❌ Validation failed: invalid location in heartbeat', { deviceId, location });
+      res.status(400).json({
+        success: false,
+        message: 'Valid location (lat, lng) is required and must be numbers'
+      });
+      return;
+    }
+
+    // Validate batteryLevel if provided
+    if (batteryLevel !== undefined && (typeof batteryLevel !== 'number' || batteryLevel < 0 || batteryLevel > 100)) {
+      console.error('❌ Validation failed: invalid batteryLevel in heartbeat', { deviceId, batteryLevel });
+      res.status(400).json({
+        success: false,
+        message: 'batteryLevel must be a number between 0 and 100'
+      });
+      return;
+    }
+
+    // Validate status if provided
+    if (status && !Object.values(SentinelStatus).includes(status)) {
+      console.error('❌ Validation failed: invalid status in heartbeat', { deviceId, status });
+      res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${Object.values(SentinelStatus).join(', ')}`
+      });
+      return;
+    }
 
     const updateData: any = { lastSeen: new Date() };
     
@@ -763,14 +814,73 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
 
     console.log(`🛑 Stream stop requested for ${deviceId}`);
 
-    // Note: In a real implementation, this would send a command to the Raspberry Pi
-    // via WebSocket, MQTT, or HTTP callback to stop the camera stream
-    // For now, we just log the request
+    // Check for recent alerts — if any recent alerts exist for this sentinel, do NOT stop the stream.
+    const recentWindowMs = 2 * 60 * 1000; // 2 minutes
+    const recentThreshold = new Date(Date.now() - recentWindowMs);
 
-    res.status(200).json({
-      success: true,
-      message: `Stream stop request sent to ${deviceId}`
+    const recentAlertsCount = await Alert.countDocuments({
+      sentinelId: deviceId.toUpperCase(),
+      timestamp: { $gte: recentThreshold }
     });
+
+    const activeAlertsCount = await Alert.countDocuments({
+      sentinelId: deviceId.toUpperCase(),
+      isVerified: false
+    });
+
+    if (sentinel.status === SentinelStatus.ALERT || recentAlertsCount > 0 || activeAlertsCount > 0) {
+      console.log(`⛔ Not stopping stream for ${deviceId} — status=${sentinel.status}, recent=${recentAlertsCount}, activeUnverified=${activeAlertsCount}`);
+      res.status(200).json({
+        success: true,
+        message: `Stream NOT stopped: active/unverified/recent alert(s) detected for ${deviceId}`
+      });
+      return;
+    }
+
+    // No recent alerts — safe to request stream stop on the Pi
+    // Determine base URL for control endpoints
+    let baseUrl: string | null = null;
+    if (sentinel.streamUrl) {
+      baseUrl = sentinel.streamUrl.replace('/stream', '');
+    } else if (sentinel.ipAddress) {
+      baseUrl = `http://${sentinel.ipAddress}:3000`;
+    }
+
+    if (!baseUrl) {
+      console.warn(`⚠ No known endpoint for ${deviceId} to request stream stop`);
+      res.status(200).json({ success: true, message: 'No Pi endpoint known — nothing to stop' });
+      return;
+    }
+
+    try {
+      // Prefer a dedicated stop endpoint if implemented
+      const stopEndpoints = ['/control/stop_stream', '/control/deactivate', '/control/stop'];
+      let stopped = false;
+
+      for (const ep of stopEndpoints) {
+        try {
+          const url = `${baseUrl}${ep}`;
+          console.log(`🛰 Calling Pi to stop stream: ${url}`);
+          const response = await fetch(url, { method: 'POST', headers: { 'ngrok-skip-browser-warning': 'true' } });
+          if (response.ok) {
+            stopped = true;
+            console.log(`✅ Pi acknowledged stop at ${ep}`);
+            break;
+          }
+        } catch (e) {
+          // continue to next endpoint
+        }
+      }
+
+      if (!stopped) {
+        console.warn(`⚠ Pi did not acknowledge any stop endpoints for ${deviceId}`);
+      }
+
+      res.status(200).json({ success: true, message: `Stream stop request processed for ${deviceId}` });
+    } catch (err) {
+      console.error('❌ Error while requesting stream stop on Pi:', err);
+      res.status(500).json({ success: false, message: 'Failed to request stream stop', error: err instanceof Error ? err.message : err });
+    }
   } catch (error) {
     console.error('❌ Error requesting stream stop:', error);
     

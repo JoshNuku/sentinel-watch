@@ -11,7 +11,9 @@ import {
   ChevronRight,
   LogOut,
   Menu,
-  X
+  X,
+  Sun,
+  Moon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,26 @@ const DashboardLayout = () => {
   const notifRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const { logout, user } = useAuth();
+
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return document.documentElement.classList.contains('dark') || 
+             (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+    return false;
+  });
+
+  const toggleTheme = () => {
+    const nextIsDark = !isDark;
+    setIsDark(nextIsDark);
+    if (nextIsDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -82,6 +104,13 @@ const DashboardLayout = () => {
             </span>
           </Link>
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun className="h-5 w-5 text-muted-foreground" /> : <Moon className="h-5 w-5 text-muted-foreground" />}
+            </button>
             <div className="relative">
               <button
                 onClick={() => setNotifOpen(!notifOpen)}
@@ -245,6 +274,15 @@ const DashboardLayout = () => {
       >
         {/* Desktop topbar (notifications) */}
         <div className="hidden lg:flex items-center justify-end p-4 border-b border-border/40 sticky top-0 z-40 bg-background/80">
+          <div className="flex items-center gap-1 mr-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun className="h-5 w-5 text-muted-foreground" /> : <Moon className="h-5 w-5 text-muted-foreground" />}
+            </button>
+          </div>
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => setNotifOpen(!notifOpen)}
