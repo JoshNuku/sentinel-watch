@@ -36,8 +36,7 @@ export const initiateStream = async (deviceId: string): Promise<{ success: boole
 
     try {
       await fetch(`${baseUrl}/control/request_stream`, {
-        method: 'POST',
-        headers: { 'ngrok-skip-browser-warning': 'true' }
+        method: 'POST'
       });
     } catch (fetchErr) {
       // non-fatal
@@ -82,13 +81,13 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
       triggerType
     } = req.body;
 
-    // Helper: ensure ngrok stream URLs end with /stream
+    // Helper: ensure Cloudflare tunnel stream URLs end with /stream
     const sanitizeStreamUrl = (url?: string | null): string | undefined => {
       if (!url) return undefined;
       try {
         const parsed = new URL(url);
-        // Only force /stream for ngrok hostnames (covers ngrok.* domains)
-        if (parsed.hostname.includes('ngrok')) {
+        // Only force /stream for tunnel hostnames (cloudflare/trycloudflare domains)
+        if (parsed.hostname.includes('trycloudflare') || parsed.hostname.includes('cloudflare')) {
           // normalize pathname and append '/stream' if missing
           const cleanPath = parsed.pathname.replace(/\/+$/g, '');
           if (!cleanPath.endsWith('/stream')) {
@@ -137,7 +136,7 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
 
       await sentinel.save();
 
-      console.log(`🔄 Sentinel ${deviceId} updated - Battery: ${sentinel.batteryLevel}%`);
+      console.info(`[SentinelController] Sentinel ${deviceId} updated - Battery: ${sentinel.batteryLevel}%`);
 
       res.status(200).json({
         success: true,
@@ -159,7 +158,7 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
 
       await sentinel.save();
 
-      console.log(`✅ New Sentinel registered: ${deviceId}`);
+      console.info(`[SentinelController] New Sentinel registered: ${deviceId}`);
 
       res.status(201).json({
         success: true,
@@ -168,7 +167,7 @@ export const registerSentinel = async (req: Request, res: Response): Promise<voi
       });
     }
   } catch (error) {
-    console.error('❌ Error registering sentinel:', error);
+    console.error('[SentinelController] Error registering sentinel:', error);
     
     res.status(500).json({
       success: false,
@@ -193,7 +192,7 @@ export const getAllSentinels = async (req: Request, res: Response): Promise<void
 
     const sentinels = await Sentinel.find(query).sort({ lastSeen: -1 });
 
-    console.log(`📡 Retrieved ${sentinels.length} sentinels`);
+    console.info(`[SentinelController] Retrieved ${sentinels.length} sentinels`);
 
     res.status(200).json({
       success: true,
@@ -201,7 +200,7 @@ export const getAllSentinels = async (req: Request, res: Response): Promise<void
       data: sentinels
     });
   } catch (error) {
-    console.error('❌ Error fetching sentinels:', error);
+    console.error('[SentinelController] Error fetching sentinels:', error);
 
     res.status(500).json({
       success: false,
@@ -228,7 +227,7 @@ export const getSentinelById = async (req: Request, res: Response): Promise<void
 
     res.status(200).json({ success: true, data: sentinel });
   } catch (error) {
-    console.error('❌ Error fetching sentinel:', error);
+    console.error('[SentinelController] Error fetching sentinel:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch sentinel', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
@@ -263,7 +262,7 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
     const sentinel = await Sentinel.findOneAndUpdate(
       { deviceId: deviceId.toUpperCase() },
       updateData,
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!sentinel) {
@@ -271,7 +270,7 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
       return;
     }
 
-    console.log(`🔄 Sentinel ${deviceId} status changed to ${status || 'unchanged'}`);
+    console.info(`[SentinelController] Sentinel ${deviceId} status changed to ${status || 'unchanged'}`);
 
     // Emit status update to connected dashboards
     if (io && status) {
@@ -284,7 +283,7 @@ export const updateSentinelStatus = async (req: Request, res: Response): Promise
 
     res.status(200).json({ success: true, message: 'Sentinel status updated', data: sentinel });
   } catch (error) {
-    console.error('❌ Error updating sentinel status:', error);
+    console.error('[SentinelController] Error updating sentinel status:', error);
     res.status(500).json({ success: false, message: 'Failed to update sentinel status', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
@@ -300,11 +299,11 @@ export const updateSentinelStatusPut = async (req: Request, res: Response): Prom
     const { status, location, batteryLevel, triggerType } = req.body;
 
     // Log incoming heartbeat for debugging
-    console.log(`📥 Heartbeat PUT /api/sentinels/${deviceId}/status - body:`, JSON.stringify(req.body));
+    console.info(`[SentinelController] Heartbeat received from ${deviceId}`);
 
     // Basic validation: ensure location has numeric lat/lng when provided
     if (location && (typeof location.lat !== 'number' || typeof location.lng !== 'number')) {
-      console.error('❌ Validation failed: invalid location in heartbeat', { deviceId, location });
+      console.error('[SentinelController] Validation failed: invalid location in heartbeat', { deviceId, location });
       res.status(400).json({
         success: false,
         message: 'Valid location (lat, lng) is required and must be numbers'
@@ -352,7 +351,7 @@ export const updateSentinelStatusPut = async (req: Request, res: Response): Prom
     const sentinel = await Sentinel.findOneAndUpdate(
       { deviceId: deviceId.toUpperCase() },
       updateData,
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!sentinel) {
@@ -363,7 +362,7 @@ export const updateSentinelStatusPut = async (req: Request, res: Response): Prom
       return;
     }
 
-    console.log(`\ud83d\udc93 Heartbeat from ${deviceId} - Status: ${sentinel.status}, Battery: ${sentinel.batteryLevel}%`);
+    console.info(`[SentinelController] Heartbeat from ${deviceId} - Status: ${sentinel.status}, Battery: ${sentinel.batteryLevel}%`);
     
     // Emit status update to connected dashboards
     if (io) {
@@ -378,7 +377,7 @@ export const updateSentinelStatusPut = async (req: Request, res: Response): Prom
 
     res.status(200).json({ message: 'Status updated' });
   } catch (error) {
-    console.error('\u274c Error updating sentinel status:', error);
+    console.error('[SentinelController] Error updating sentinel status:', error);
     
     res.status(500).json({
       success: false,
@@ -418,19 +417,16 @@ export const activateSentinel = async (req: Request, res: Response): Promise<voi
     // Extract base URL from stream URL (remove /stream suffix)
     const baseUrl = sentinel.streamUrl.replace('/stream', '');
     
-    console.log(`\ud83d\udfe2 Activating sentinel ${deviceId} - calling ${baseUrl}/control/activate`);
+    console.info(`[SentinelController] Activating sentinel ${deviceId} - calling ${baseUrl}/control/activate`);
 
     try {
       const response = await fetch(`${baseUrl}/control/activate`, {
-        method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
+        method: 'POST'
       });
 
       if (response.ok) {
         const data = await response.json() as { mode: string; status?: string };
-        console.log(`\u2705 Sentinel ${deviceId} activated - Mode: ${data.mode}`);
+        console.info(`[SentinelController] Sentinel ${deviceId} activated - Mode: ${data.mode}`);
         
         // Update sentinel status in database
         sentinel.status = SentinelStatus.ALERT;
@@ -505,19 +501,16 @@ export const deactivateSentinel = async (req: Request, res: Response): Promise<v
     // Extract base URL from stream URL
     const baseUrl = sentinel.streamUrl.replace('/stream', '');
     
-    console.log(`\ud83d\udd34 Deactivating sentinel ${deviceId} - calling ${baseUrl}/control/deactivate`);
+    console.info(`[SentinelController] Deactivating sentinel ${deviceId} - calling ${baseUrl}/control/deactivate`);
 
     try {
       const response = await fetch(`${baseUrl}/control/deactivate`, {
-        method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
+        method: 'POST'
       });
 
       if (response.ok) {
         const data = await response.json() as { mode: string; status?: string };
-        console.log(`\u2705 Sentinel ${deviceId} deactivated - Mode: ${data.mode}`);
+        console.info(`[SentinelController] Sentinel ${deviceId} deactivated - Mode: ${data.mode}`);
         
         // Update sentinel status in database
         sentinel.status = SentinelStatus.ACTIVE;
@@ -591,10 +584,7 @@ export const sendKeepAlive = async (req: Request, res: Response): Promise<void> 
 
     try {
       const response = await fetch(`${baseUrl}/stream/keepalive`, {
-        method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
+        method: 'POST'
       });
 
       if (response.ok) {
@@ -657,11 +647,7 @@ export const getPiStatus = async (req: Request, res: Response): Promise<void> =>
     const baseUrl = sentinel.streamUrl.replace('/stream', '');
 
     try {
-      const response = await fetch(`${baseUrl}/status`, {
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
-      });
+      const response = await fetch(`${baseUrl}/status`);
 
       if (response.ok) {
         const data = await response.json() as { 
@@ -720,7 +706,7 @@ export const requestStreamStart = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    console.log(`\ud83d\udcf9 Stream start requested for ${deviceId}`);
+    console.info(`[SentinelController] Stream start requested for ${deviceId}`);
 
     // Determine base URL for control endpoints
     let baseUrl: string | null = null;
@@ -742,15 +728,12 @@ export const requestStreamStart = async (req: Request, res: Response): Promise<v
     // Fire request to Pi to create a public stream (if supported)
     try {
       await fetch(`${baseUrl}/control/request_stream`, {
-        method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
+        method: 'POST'
       });
     } catch (fetchErr) {
       // Log but continue to poll the DB for streamUrl — some Pi implementations
       // may return before the HTTP call completes or the tunnel is created.
-      console.warn(`\u26A0 Failed to call Pi request_stream for ${deviceId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
+      console.warn(`[SentinelController] Failed to call Pi request_stream for ${deviceId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
     }
 
     // Poll the database for sentinel.streamUrl to appear
@@ -782,7 +765,7 @@ export const requestStreamStart = async (req: Request, res: Response): Promise<v
       message: 'Timed out waiting for sentinel to create stream URL'
     });
   } catch (error) {
-    console.error('❌ Error requesting stream start:', error);
+    console.error('[SentinelController] Error requesting stream start:', error);
 
     res.status(500).json({
       success: false,
@@ -812,7 +795,7 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    console.log(`🛑 Stream stop requested for ${deviceId}`);
+    console.info(`[SentinelController] Stream stop requested for ${deviceId}`);
 
     // Check for recent alerts — if any recent alerts exist for this sentinel, do NOT stop the stream.
     const recentWindowMs = 2 * 60 * 1000; // 2 minutes
@@ -829,7 +812,7 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
     });
 
     if (sentinel.status === SentinelStatus.ALERT || recentAlertsCount > 0 || activeAlertsCount > 0) {
-      console.log(`⛔ Not stopping stream for ${deviceId} — status=${sentinel.status}, recent=${recentAlertsCount}, activeUnverified=${activeAlertsCount}`);
+      console.info(`[SentinelController] Not stopping stream for ${deviceId} — status=${sentinel.status}, recent=${recentAlertsCount}, activeUnverified=${activeAlertsCount}`);
       res.status(200).json({
         success: true,
         message: `Stream NOT stopped: active/unverified/recent alert(s) detected for ${deviceId}`
@@ -847,7 +830,7 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
     }
 
     if (!baseUrl) {
-      console.warn(`⚠ No known endpoint for ${deviceId} to request stream stop`);
+      console.warn(`[SentinelController] No known endpoint for ${deviceId} to request stream stop`);
       res.status(200).json({ success: true, message: 'No Pi endpoint known — nothing to stop' });
       return;
     }
@@ -860,11 +843,11 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
       for (const ep of stopEndpoints) {
         try {
           const url = `${baseUrl}${ep}`;
-          console.log(`🛰 Calling Pi to stop stream: ${url}`);
-          const response = await fetch(url, { method: 'POST', headers: { 'ngrok-skip-browser-warning': 'true' } });
+          console.info(`[SentinelController] Calling Pi to stop stream: ${url}`);
+          const response = await fetch(url, { method: 'POST' });
           if (response.ok) {
             stopped = true;
-            console.log(`✅ Pi acknowledged stop at ${ep}`);
+            console.info(`[SentinelController] Pi acknowledged stop at ${ep}`);
             break;
           }
         } catch (e) {
@@ -873,16 +856,16 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
       }
 
       if (!stopped) {
-        console.warn(`⚠ Pi did not acknowledge any stop endpoints for ${deviceId}`);
+        console.warn(`[SentinelController] Pi did not acknowledge any stop endpoints for ${deviceId}`);
       }
 
       res.status(200).json({ success: true, message: `Stream stop request processed for ${deviceId}` });
     } catch (err) {
-      console.error('❌ Error while requesting stream stop on Pi:', err);
+      console.error('[SentinelController] Error while requesting stream stop on Pi:', err);
       res.status(500).json({ success: false, message: 'Failed to request stream stop', error: err instanceof Error ? err.message : err });
     }
   } catch (error) {
-    console.error('❌ Error requesting stream stop:', error);
+    console.error('[SentinelController] Error requesting stream stop:', error);
     
     res.status(500).json({
       success: false,

@@ -51,7 +51,7 @@ const AlertsList = () => {
 
     // Listen for new alerts via WebSocket
     wsService.connect();
-    const unsubscribe = wsService.onNewAlert((data) => {
+    const unsubscribeNew = wsService.onNewAlert((data) => {
       setAlerts(prev => {
         // Avoid duplicates by checking if alert already exists
         const exists = prev.some(a => a._id === data.alert._id);
@@ -60,7 +60,15 @@ const AlertsList = () => {
       });
     });
 
-    return () => unsubscribe();
+    // Listen for alert updates (e.g. image uploaded to OBS)
+    const unsubscribeUpdated = wsService.onAlertUpdated((updatedAlert) => {
+      setAlerts(prev => prev.map(a => a._id === updatedAlert._id ? updatedAlert : a));
+    });
+
+    return () => {
+      unsubscribeNew();
+      unsubscribeUpdated();
+    };
   }, []);
 
   const unverifiedCount = alerts.filter(a => !a.isVerified).length;

@@ -71,6 +71,16 @@ const AlertSchema = new Schema<AlertDocument>(
     triggeredSensors: {
       type: [String],
       default: []
+    },
+    imageUploadStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed', 'none'],
+      default: 'none'
+    },
+    smnNotificationStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed', 'none'],
+      default: 'none'
     }
   },
   {

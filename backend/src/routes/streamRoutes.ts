@@ -7,7 +7,7 @@ const router = Router();
 /**
  * GET /api/stream/:deviceId
  * Proxy video stream from Raspberry Pi through backend
- * This bypasses ngrok's browser warning page
+ * This serves as a unified proxy route
  */
 router.get('/:deviceId', async (req: Request, res: Response) => {
   try {
@@ -26,17 +26,14 @@ router.get('/:deviceId', async (req: Request, res: Response) => {
 
     console.log(`📹 Proxying stream for ${deviceId} from ${sentinel.streamUrl}`);
 
-    // Fetch stream from ngrok URL
-    // Important: Add ngrok-skip-browser-warning header to bypass the consent screen
+    // Fetch stream from tunnel URL
     const response = await axios({
       method: 'GET',
       url: sentinel.streamUrl,
       responseType: 'stream',
       timeout: 30000,
       headers: {
-        'Accept': 'multipart/x-mixed-replace, */*',
-        'ngrok-skip-browser-warning': 'true',  // Bypass ngrok warning page
-        'User-Agent': 'Mozilla/5.0 (compatible; SentinelWatch/1.0)'  // Some ngrok versions need a user agent
+        'Accept': 'multipart/x-mixed-replace, */*'
       }
     });
 
@@ -127,11 +124,7 @@ router.get('/snapshot/:deviceId', async (req: Request, res: Response) => {
       method: 'GET',
       url: snapshotUrl,
       responseType: 'stream',
-      timeout: 10000,
-      headers: {
-        'ngrok-skip-browser-warning': 'true',
-        'User-Agent': 'Mozilla/5.0 (compatible; SentinelWatch/1.0)'
-      }
+      timeout: 10000
     });
 
     res.setHeader('Content-Type', 'image/jpeg');

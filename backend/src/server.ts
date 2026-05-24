@@ -7,6 +7,9 @@ import morgan from 'morgan';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Load environment variables
 dotenv.config();
@@ -18,7 +21,8 @@ import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import { setSocketIO } from './controllers/alertController';
 import { setSentinelSocketIO } from './controllers/sentinelController';
-import { huaweiSMNService } from './services';
+import { huaweiSMNService, huaweiOBSService, huaweiECSService } from './services';
+import { alertWorker } from './services/alertWorker';
 import { Sentinel } from './models';
 import { SentinelStatus } from './types';
 import path from 'path';
@@ -77,8 +81,9 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Apply rate limiter to API routes (not to Raspberry Pi endpoints)
-app.use('/api/', limiter);
+// Apply rate limiter to API auth routes to prevent brute force
+// Excludes IoT endpoints to prevent Denial of Service for devices on shared IP
+app.use('/api/auth', limiter);
 
 // ============================================
 // SOCKET.IO CONFIGURATION
@@ -91,6 +96,21 @@ const io = new SocketServer(httpServer, {
     credentials: true
   },
   transports: ['websocket', 'polling']
+});
+
+// Socket.io authentication middleware
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token?.split(' ')[1]; // Bearer TOKEN
+    if (!token) {
+      return next(new Error('Authentication required'));
+    }
+
+    jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (error) {
+    next(new Error('Invalid or expired token'));
+  }
 });
 
 // Socket.io connection handling
@@ -148,7 +168,15 @@ app.get('/', (_req: Request, res: Response) => {
       connections: io.engine.clientsCount
     },
     services: {
-      sms: huaweiSMNService.getStatus()
+      smn: huaweiSMNService.getStatus(),
+      obs: {
+        configured: huaweiOBSService.isReady(),
+        mode: huaweiOBSService.isReady() ? 'LIVE' : 'LOCAL_DEV_FALLBACK'
+      },
+      ecs: {
+        runningOnECS: huaweiECSService.getInstanceId() !== null,
+        instanceId: huaweiECSService.getInstanceId() || 'N/A'
+      }
     }
   });
 });
@@ -175,27 +203,27 @@ const startOfflineDetectionJob = () => {
     try {
       const threshold = new Date(Date.now() - 90000); // 90 seconds ago
       
-      const result = await Sentinel.updateMany(
-        { 
-          lastSeen: { $lt: threshold }, 
-          status: { $ne: SentinelStatus.INACTIVE } 
-        },
-        { status: SentinelStatus.INACTIVE }
-      );
+      // Find sentinels that are about to transition to inactive
+      const transitioningSentinels = await Sentinel.find({
+        lastSeen: { $lt: threshold },
+        status: { $ne: SentinelStatus.INACTIVE }
+      });
       
-      if (result.modifiedCount > 0) {
-        console.log(`⚠️  Marked ${result.modifiedCount} sentinel(s) as inactive (no heartbeat for 90s)`);
+      if (transitioningSentinels.length > 0) {
+        const deviceIds = transitioningSentinels.map(s => s.deviceId);
         
-        // Emit status update to connected dashboards
-        const offlineSentinels = await Sentinel.find({ 
-          lastSeen: { $lt: threshold },
-          status: SentinelStatus.INACTIVE 
-        });
+        await Sentinel.updateMany(
+          { deviceId: { $in: deviceIds } },
+          { status: SentinelStatus.INACTIVE }
+        );
         
-        offlineSentinels.forEach(sentinel => {
+        console.log(`⚠️  Marked ${transitioningSentinels.length} sentinel(s) as inactive (no heartbeat for 90s)`);
+        
+        // Emit status update to connected dashboards ONLY for transitioning sentinels
+        transitioningSentinels.forEach(sentinel => {
           io.emit('sentinel-status-update', {
             deviceId: sentinel.deviceId,
-            status: sentinel.status
+            status: SentinelStatus.INACTIVE
           });
         });
       }
@@ -222,7 +250,7 @@ app.use((req: Request, res: Response) => {
 
 // Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('❌ Unhandled Error:', err);
+  console.error('[Server] Unhandled Error:', err);
 
   res.status(500).json({
     success: false,
@@ -237,26 +265,39 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 const startServer = async (): Promise<void> => {
   try {
+    // Detect Huawei ECS Environment
+    await huaweiECSService.detectECSEnvironment();
+
     // Connect to MongoDB
     await connectDatabase();
 
     // Start background jobs
     startOfflineDetectionJob();
+    
+    // Initialize Alert Worker
+    alertWorker.initialize(io);
 
     // Start HTTP server
     httpServer.listen(PORT, () => {
       console.log('\n' + '='.repeat(60));
-      console.log('🚀 PROJECT ORION - BACKEND SERVER STARTED');
+      console.log('PROJECT ORION - BACKEND SERVER STARTED');
       console.log('='.repeat(60));
-      console.log(`📡 Server running on: http://localhost:${PORT}`);
-      console.log(`🌍 Environment: ${NODE_ENV}`);
-      console.log(`🔌 WebSocket: Enabled (${io.engine.clientsCount} connections)`);
-      console.log(`🗄️  Database: Connected`);
+      console.log(`Server running on: http://localhost:${PORT}`);
+      console.log(`Environment: ${NODE_ENV}`);
+      console.log(`WebSocket: Enabled (${io.engine.clientsCount} connections)`);
+      console.log(`Database: Connected`);
+      
       const smsStatus = huaweiSMNService.getStatus() as { mode?: string };
-      console.log(`📱 SMS Service: ${smsStatus.mode ?? 'unknown'} mode`);
-      console.log(`🛡️  CORS: ${FRONTEND_URL}`);
+      console.log(`SMN Service: ${smsStatus.mode ?? 'unknown'} mode`);
+      
+      console.log(`OBS Service: ${huaweiOBSService.isReady() ? 'LIVE' : 'LOCAL_DEV_FALLBACK'} mode`);
+      
+      const instanceId = huaweiECSService.getInstanceId();
+      console.log(`ECS Environment: ${instanceId ? `Running on instance ${instanceId}` : 'Running on Local Developer Machine'}`);
+      
+      console.log(`CORS Allowed Origin: ${FRONTEND_URL}`);
       console.log('='.repeat(60) + '\n');
-      console.log('📋 API Endpoints:');
+      console.log('API Endpoints available:');
       console.log('   GET    /api/health');
       console.log('   POST   /api/sentinels/register');
       console.log('   GET    /api/sentinels');
@@ -272,27 +313,27 @@ const startServer = async (): Promise<void> => {
       console.log('   GET    /api/alerts/:id');
       console.log('   PATCH  /api/alerts/:id/verify');
       console.log('='.repeat(60) + '\n');
-      console.log('✅ System ready to receive alerts from Sentinels\n');
+      console.log('System ready to receive alerts from Sentinels\n');
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('[Server] Failed to start server:', error);
     process.exit(1);
   }
 };
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('\n⚠️  SIGTERM received, shutting down gracefully...');
+  console.log('\n[Server] SIGTERM received, shutting down gracefully...');
   httpServer.close(() => {
-    console.log('✅ Server closed');
+    console.log('[Server] Server closed');
     process.exit(0);
   });
 });
 
 process.on('SIGINT', () => {
-  console.log('\n⚠️  SIGINT received, shutting down gracefully...');
+  console.log('\n[Server] SIGINT received, shutting down gracefully...');
   httpServer.close(() => {
-    console.log('✅ Server closed');
+    console.log('[Server] Server closed');
     process.exit(0);
   });
 });

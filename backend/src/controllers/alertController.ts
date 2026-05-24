@@ -1,15 +1,14 @@
 import { Request, Response } from 'express';
 import { Alert, Sentinel } from '../models';
 import { SentinelStatus } from '../types';
-import { huaweiSMNService } from '../services';
-import { Server as SocketServer } from 'socket.io';
 import fs from 'fs';
 import path from 'path';
+
+import { Server as SocketServer } from 'socket.io';
 
 /**
  * Alert Controller
  * Handles all alert creation and retrieval operations
- * Critical: Coordinates between DB, WebSocket, and SMS notifications
  */
 
 // Socket.io instance (will be injected from server.ts)
@@ -19,22 +18,15 @@ export const setSocketIO = (socketServer: SocketServer): void => {
   io = socketServer;
 };
 
+// Track active auto-reset timeouts to prevent memory leaks from overlapping alerts
+const resetTimeouts = new Map<string, NodeJS.Timeout>();
+
 /**
  * POST /api/alerts
  * Create new alert from Raspberry Pi threat detection
- * 
- * CRITICAL WORKFLOW:
- * 1. Save alert to MongoDB
- * 2. Update Sentinel status to 'alert'
- * 3. Emit Socket.io event to dashboard (real-time)
- * 4. Send SMS via Huawei SMN
  */
 export const createAlert = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('\n=== ALERT CREATION REQUEST ===');
-    console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
-    console.log('📥 Headers:', req.headers['content-type']);
-    
     const {
       sentinelId,
       threatType,
@@ -48,11 +40,7 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
 
     // Validation
     if (!sentinelId || !threatType || !confidence || !location) {
-      console.log('❌ Validation failed - missing fields');
-      console.log('   sentinelId:', sentinelId);
-      console.log('   threatType:', threatType);
-      console.log('   confidence:', confidence);
-      console.log('   location:', location);
+      console.warn('[AlertController] Validation failed: missing sentinelId, threatType, confidence, or location');
       res.status(400).json({
         success: false,
         message: 'Missing required fields: sentinelId, threatType, confidence, location'
@@ -60,27 +48,7 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    if (confidence < 0 || confidence > 1) {
-      res.status(400).json({
-        success: false,
-        message: 'Confidence must be between 0 and 1'
-      });
-      return;
-    }
-
-    if (!location.lat || !location.lng) {
-      res.status(400).json({
-        success: false,
-        message: 'Location must include lat and lng'
-      });
-      return;
-    }
-
-    // Check if sentinel exists
     const sentinel = await Sentinel.findOne({ deviceId: sentinelId.toUpperCase() });
-    console.log('🔍 Sentinel lookup for:', sentinelId.toUpperCase());
-    console.log('   Found:', sentinel ? `${sentinel.deviceId} (${sentinel.status})` : 'NOT FOUND');
-    
     if (!sentinel) {
       res.status(404).json({
         success: false,
@@ -97,69 +65,63 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
       location,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
       isVerified: false,
-      imageUrl: null, // Will be set after saving image
+      imageUrl: null,
       triggerType: triggerType ?? null,
-      triggeredSensors: Array.isArray(triggeredSensors) ? triggeredSensors : []
+      triggeredSensors: Array.isArray(triggeredSensors) ? triggeredSensors : [],
+      imageUploadStatus: imageData ? 'pending' : 'none',
+      smnNotificationStatus: 'pending'
     });
 
-    await alert.save();
-
-    console.log(`🚨 NEW ALERT: ${threatType} detected by ${sentinelId} (${Math.round(confidence * 100)}% confidence)`);
-    console.log('   Alert ID:', alert._id);
-    console.log('   Location:', `${location.lat}, ${location.lng}`);
-
-    // Step 1.5: Save base64 image to disk if provided
     if (imageData) {
       try {
+        const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '').replace(/^base64:/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        
         const uploadsDir = path.join(__dirname, '../../uploads/alerts');
-        // Ensure directory exists
         if (!fs.existsSync(uploadsDir)) {
           fs.mkdirSync(uploadsDir, { recursive: true });
         }
         
-        const imagePath = path.join(uploadsDir, `${alert._id}.jpg`);
-        const imageBuffer = Buffer.from(imageData, 'base64');
-        fs.writeFileSync(imagePath, imageBuffer);
+        const filename = `${alert.sentinelId}_${alert._id}.jpg`;
+        const filePath = path.join(uploadsDir, filename);
+        fs.writeFileSync(filePath, buffer);
         
-        // Update alert with image URL
-        alert.imageUrl = `/uploads/alerts/${alert._id}.jpg`;
-        await alert.save();
-        
-        console.log(`📸 Alert image saved: ${imagePath} (${Math.round(imageBuffer.length / 1024)}KB)`);
-      } catch (imageError) {
-        console.error('❌ Failed to save alert image:', imageError);
-        // Don't fail the request if image save fails
+        alert.imageUrl = `/uploads/alerts/${filename}`;
+      } catch (err) {
+        console.error('[AlertController] Failed to save alert image locally:', err);
+        // Fallback to storing raw base64 in database if file system fails
+        alert.imageUrl = `base64:${imageData}`;
       }
     }
+
+    await alert.save();
+    console.info(`[AlertController] Created alert ${alert._id} for threat: ${threatType} from sentinel: ${sentinelId}`);
 
     // Step 2: Update Sentinel status to 'alert'
     sentinel.status = SentinelStatus.ALERT;
     sentinel.lastSeen = new Date();
     await sentinel.save();
-    console.log('✅ Sentinel status updated to:', sentinel.status);
 
-    // If a stream URL is already stored for this sentinel, use it — emit a
-    // `start-stream` Socket.io event so dashboards or other consumers can begin playback.
+    // Emit start-stream event if stream URL is present
     if (sentinel.streamUrl) {
-      console.log(`📡 Stream URL present for ${sentinel.deviceId}: ${sentinel.streamUrl} — emitting start-stream`);
       if (io) {
         io.emit('start-stream', { deviceId: sentinel.deviceId, streamUrl: sentinel.streamUrl });
       }
-    } else {
-      console.log(`ℹ️ No streamUrl available in DB for ${sentinel.deviceId}`);
     }
 
     // Step 2.5: Auto-reset sentinel status after 2 minutes
-    // This prevents the "THREAT DETECTED" indicator from showing indefinitely
-    setTimeout(async () => {
+    if (resetTimeouts.has(sentinelId)) {
+      clearTimeout(resetTimeouts.get(sentinelId)!);
+    }
+    
+    const timeoutId = setTimeout(async () => {
       try {
         const updatedSentinel = await Sentinel.findOne({ deviceId: sentinelId.toUpperCase() });
         if (updatedSentinel && updatedSentinel.status === SentinelStatus.ALERT) {
           updatedSentinel.status = SentinelStatus.ACTIVE;
           await updatedSentinel.save();
-          console.log(`⏰ Auto-reset: ${sentinelId} status changed from alert to active`);
+          console.info(`[AlertController] Auto-reset sentinel ${sentinelId} status to active`);
           
-          // Emit status update to connected clients
           if (io) {
             io.emit('sentinel-status-update', {
               deviceId: updatedSentinel.deviceId,
@@ -168,9 +130,13 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
           }
         }
       } catch (error) {
-        console.error('❌ Error auto-resetting sentinel status:', error);
+        console.error('[AlertController] Error auto-resetting sentinel status:', error);
+      } finally {
+        resetTimeouts.delete(sentinelId);
       }
     }, 2 * 60 * 1000); // 2 minutes
+    
+    resetTimeouts.set(sentinelId, timeoutId);
 
     // Step 3: Emit real-time Socket.io event to connected dashboards
     if (io) {
@@ -179,47 +145,26 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
         sentinel: sentinel.toJSON()
       };
       io.emit('new-alert', alertData);
-      console.log('📡 Alert broadcasted to connected dashboards via WebSocket');
-      console.log('   Event:', 'new-alert');
-      console.log('   Connected clients:', io.sockets.sockets.size);
-    } else {
-      console.warn('⚠️  Socket.io not initialized - alert not broadcasted');
     }
 
-    // Step 4: Send SMS notification via Huawei SMN
-    try {
-      console.log('📱 Attempting to send SMS notification...');
-      await huaweiSMNService.sendAlertSMS({
-        threatType,
-        deviceId: sentinelId,
-        confidence,
-        location,
-        timestamp: alert.timestamp
-      });
-      console.log('✅ SMS notification sent successfully');
-    } catch (smsError) {
-      console.error('❌ SMS notification failed:', smsError);
-      // Don't fail the request if SMS fails - alert is already saved
-    }
-
-    console.log('=== ALERT CREATION COMPLETE ===\n');
-
-    // Return success response
+    // Fast Response to Edge Sentinel (Prevents timeout on slow connections)
     res.status(201).json({
       success: true,
-      message: 'Alert created and notifications sent',
+      message: 'Alert created and queued for processing',
       data: {
-        alert,
+        alert: alert.toJSON(),
         sentinel: {
           deviceId: sentinel.deviceId,
-          status: sentinel.status,
+          status: SentinelStatus.ALERT,
           location: sentinel.location
         }
       }
     });
-  } catch (error) {
-    console.error('❌ Error creating alert:', error);
     
+    // Trigger the worker to start immediately (non-blocking)
+    import('../services/alertWorker').then(({ alertWorker }) => alertWorker.triggerNow());
+  } catch (error) {
+    console.error('[AlertController] Error creating alert:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create alert',
@@ -231,7 +176,6 @@ export const createAlert = async (req: Request, res: Response): Promise<void> =>
 /**
  * GET /api/alerts
  * Get alert history with filtering and pagination
- * Used by dashboard to display alert feed
  */
 export const getAllAlerts = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -245,7 +189,6 @@ export const getAllAlerts = async (req: Request, res: Response): Promise<void> =
       order = 'desc'
     } = req.query;
 
-    // Build query
     const query: any = {};
     if (sentinelId) {
       query.sentinelId = (sentinelId as string).toUpperCase();
@@ -257,16 +200,13 @@ export const getAllAlerts = async (req: Request, res: Response): Promise<void> =
       query.isVerified = isVerified === 'true';
     }
 
-    // Pagination
     const limitNum = parseInt(limit as string, 10);
     const pageNum = parseInt(page as string, 10);
     const skip = (pageNum - 1) * limitNum;
 
-    // Sorting
     const sortOrder = order === 'asc' ? 1 : -1;
     const sortOptions: any = { [sortBy as string]: sortOrder };
 
-    // Execute query
     const alerts = await Alert.find(query)
       .sort(sortOptions)
       .limit(limitNum)
@@ -274,8 +214,6 @@ export const getAllAlerts = async (req: Request, res: Response): Promise<void> =
       .lean();
 
     const total = await Alert.countDocuments(query);
-
-    console.log(`📋 Retrieved ${alerts.length} alerts (page ${pageNum}/${Math.ceil(total / limitNum)})`);
 
     res.status(200).json({
       success: true,
@@ -288,8 +226,7 @@ export const getAllAlerts = async (req: Request, res: Response): Promise<void> =
       }
     });
   } catch (error) {
-    console.error('❌ Error fetching alerts:', error);
-    
+    console.error('[AlertController] Error fetching alerts:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch alerts',
@@ -305,7 +242,6 @@ export const getAllAlerts = async (req: Request, res: Response): Promise<void> =
 export const getAlertById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-
     const alert = await Alert.findById(id);
 
     if (!alert) {
@@ -321,8 +257,7 @@ export const getAlertById = async (req: Request, res: Response): Promise<void> =
       data: alert
     });
   } catch (error) {
-    console.error('❌ Error fetching alert:', error);
-    
+    console.error('[AlertController] Error fetching alert:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch alert',
@@ -354,9 +289,8 @@ export const verifyAlert = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    console.log(`✅ Alert ${id} verification status: ${alert.isVerified}`);
+    console.info(`[AlertController] Verified alert ${id}: status=${alert.isVerified}`);
 
-    // Broadcast update to dashboards
     if (io) {
       io.emit('alert-verified', {
         alertId: id,
@@ -370,8 +304,7 @@ export const verifyAlert = async (req: Request, res: Response): Promise<void> =>
       data: alert
     });
   } catch (error) {
-    console.error('❌ Error verifying alert:', error);
-    
+    console.error('[AlertController] Error verifying alert:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to verify alert',
@@ -390,12 +323,10 @@ export const getAlertStats = async (_req: Request, res: Response): Promise<void>
     const verified = await Alert.countDocuments({ isVerified: true });
     const unverified = await Alert.countDocuments({ isVerified: false });
 
-    // Get alerts from today (since midnight local time)
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const recent = await Alert.countDocuments({ timestamp: { $gte: startOfToday } });
 
-    // Group by threat type
     const byThreatType = await Alert.aggregate([
       {
         $group: {
@@ -419,8 +350,7 @@ export const getAlertStats = async (_req: Request, res: Response): Promise<void>
       }
     });
   } catch (error) {
-    console.error('❌ Error fetching alert stats:', error);
-    
+    console.error('[AlertController] Error fetching alert stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch alert statistics',

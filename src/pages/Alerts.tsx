@@ -15,7 +15,11 @@ import {
   Clock,
   Radio,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  User,
+  Bike,
+  Bus,
+  Volume2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,11 +36,14 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { SensorChip, TriggerBadge } from "@/lib/sensorIcons";
 
-const threatIcons = {
-  Excavator: Construction,
-  'Dump-Truck': Truck,
-  'Water Pump': Droplets,
-  Person: Radio,
+const threatIcons: Record<string, any> = {
+  person: User,
+  car: Truck,
+  truck: Truck,
+  motorcycle: Bike,
+  bus: Bus,
+  excavator: Construction,
+  suspicious_noise: Volume2,
 };
 
 const Alerts = () => {
@@ -50,7 +57,13 @@ const Alerts = () => {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [imgFailed, setImgFailed] = useState(false);
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
 
+  // Auto-refresh timer for accurate 'time ago'
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
   useEffect(() => {
     // Reset image-failed state whenever a new alert is selected
     setImgFailed(false);
@@ -76,15 +89,27 @@ const Alerts = () => {
     wsService.connect();
 
     // Listen for new alerts
-    const unsubscribe = wsService.onNewAlert((data) => {
+    const unsubscribeNew = wsService.onNewAlert((data) => {
       console.log('📡 New alert received via WebSocket:', data);
-      setAlerts(prev => [data.alert, ...prev]);
+      setAlerts(prev => {
+        const exists = prev.some(a => a._id === data.alert._id);
+        if (exists) return prev;
+        return [data.alert, ...prev];
+      });
       toast.success(`New ${data.alert.threatType} detected by ${data.alert.sentinelId}!`);
+    });
+
+    // Listen for alert updates (e.g. image uploaded to OBS)
+    const unsubscribeUpdated = wsService.onAlertUpdated((updatedAlert) => {
+      console.log('📡 Alert updated via WebSocket:', updatedAlert);
+      setAlerts(prev => prev.map(a => a._id === updatedAlert._id ? updatedAlert : a));
+      setSelectedAlert(prev => prev?._id === updatedAlert._id ? updatedAlert : prev);
     });
 
     // Cleanup on unmount
     return () => {
-      unsubscribe();
+      unsubscribeNew();
+      unsubscribeUpdated();
     };
   }, []);
 
@@ -144,9 +169,8 @@ const Alerts = () => {
   const unverifiedCount = alerts.filter(a => !a.isVerified).length;
 
   const getTimeAgo = (timestamp: string) => {
-    const now = new Date();
     const date = new Date(timestamp);
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = now - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
@@ -210,10 +234,13 @@ const Alerts = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Threats</SelectItem>
-              <SelectItem value="Excavator">Excavator</SelectItem>
-              <SelectItem value="Dump-Truck">Dump Truck</SelectItem>
-              <SelectItem value="Water Pump">Water Pump</SelectItem>
-              <SelectItem value="Person">Person</SelectItem>
+              <SelectItem value="person">Person</SelectItem>
+              <SelectItem value="car">Car</SelectItem>
+              <SelectItem value="truck">Truck</SelectItem>
+              <SelectItem value="motorcycle">Motorcycle</SelectItem>
+              <SelectItem value="bus">Bus</SelectItem>
+              <SelectItem value="excavator">Excavator</SelectItem>
+              <SelectItem value="suspicious_noise">Suspicious Noise</SelectItem>
             </SelectContent>
           </Select>
           <Button 
@@ -264,9 +291,10 @@ const Alerts = () => {
                     <div className="flex items-start gap-3">
                       <div className={cn(
                         "p-2 rounded-lg",
-                        alert.threatType === 'Excavator' && "bg-destructive/10 text-destructive",
+                        alert.threatType === 'excavator' && "bg-destructive/10 text-destructive",
                         ['car','truck','motorcycle','bus'].includes(alert.threatType) && "bg-warning/10 text-warning",
-                        alert.threatType === 'Water Pump' && "bg-blue-500/10 text-blue-400"
+                        alert.threatType === 'person' && "bg-blue-500/10 text-blue-400",
+                        alert.threatType === 'suspicious_noise' && "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
                       )}>
                         <ThreatIcon className="h-5 w-5" />
                       </div>

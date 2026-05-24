@@ -197,7 +197,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
 
       if (res && res.success && res.data?.streamUrl) {
         // Backend returned a stream URL immediately
-        const proxied = res.data.streamUrl.includes('ngrok') ? `${getStreamUrl({ ...sentinel, streamUrl: res.data.streamUrl } as Sentinel)}` : res.data.streamUrl;
+        const proxied = getStreamUrl({ ...sentinel, streamUrl: res.data.streamUrl } as Sentinel);
         setStreamUrl(proxied);
         activatedSentinelRef.current = sentinel.deviceId;
         startKeepAlive(sentinel.deviceId);
@@ -216,7 +216,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
           const sresp = await sentinelAPI.getById(sentinel.deviceId);
           if (sresp && sresp.success && sresp.data?.streamUrl) {
             const url = sresp.data.streamUrl as string;
-            const proxied = url.includes('ngrok') ? `${getStreamUrl({ ...sentinel, streamUrl: url } as Sentinel)}` : url;
+            const proxied = getStreamUrl({ ...sentinel, streamUrl: url } as Sentinel);
             setStreamUrl(proxied);
             activatedSentinelRef.current = sentinel.deviceId;
             startKeepAlive(sentinel.deviceId);

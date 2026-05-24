@@ -19,13 +19,11 @@ export enum ThreatType {
   TRUCK = 'truck',
   MOTORCYCLE = 'motorcycle',
   BUS = 'bus',
-  CHAINSAW = 'chainsaw',
   EXCAVATOR = 'excavator',
-  SPEECH = 'speech'
+  SUSPICIOUS_NOISE = 'suspicious_noise'
 }
 
 export enum TriggerType {
-  GPIO = 'gpio',
   MICROPHONE = 'microphone',
   REMOTE = 'remote',
   AI = 'ai'
@@ -52,4 +50,6 @@ export interface IAlert {
   imageUrl?: string;
   triggerType?: TriggerType;
   triggeredSensors?: string[]; // e.g. ['SOUND'] or gpio pins
+  imageUploadStatus?: 'pending' | 'processing' | 'completed' | 'failed' | 'none';
+  smnNotificationStatus?: 'pending' | 'processing' | 'completed' | 'failed' | 'none';
 }

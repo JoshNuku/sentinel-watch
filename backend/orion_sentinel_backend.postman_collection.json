@@ -1,0 +1,440 @@
+{
+	"info": {
+		"_postman_id": "7bfa1632-441d-4009-847e-a8df1bbd067c",
+		"name": "Project ORION Sentinel C&C API",
+		"description": "API requests for orchestrating AIoT edge sentinels and dashboard notification feeds (FastAPI edge to Express backend). Supports Huawei SMN alerts, OBS threat image archival, and live WebRTC/MJPEG feeds.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "System",
+			"item": [
+				{
+					"name": "Root Information & Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Retrieves the main application descriptor including Socket.io stats and Huawei Cloud SMN/OBS/ECS connection status."
+					},
+					"response": []
+				},
+				{
+					"name": "API Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"health"
+							]
+						},
+						"description": "Standard system operational health indicator."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Sentinels Registry",
+			"item": [
+				{
+					"name": "Register or Update Sentinel",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"deviceId\": \"ORN-001\",\n  \"location\": {\n    \"lat\": -1.2921,\n    \"lng\": 36.8219\n  },\n  \"batteryLevel\": 89,\n  \"ipAddress\": \"192.168.1.100\",\n  \"streamUrl\": \"https://sentinel-watch.trycloudflare.com/stream\",\n  \"triggerType\": \"microphone\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"register"
+							]
+						},
+						"description": "Registers a new edge Raspberry Pi device or updates its system diagnostics parameters."
+					},
+					"response": []
+				},
+				{
+					"name": "List All Sentinels",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/sentinels",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels"
+							]
+						},
+						"description": "Fetches a live telemetry feed of all registered edge sentinels sorted by last seen."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sentinel By ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/ORN-001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"ORN-001"
+							]
+						},
+						"description": "Retrieve comprehensive metadata for a specific sentinel."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Status Put (Pi Heartbeat)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"active\",\n  \"location\": {\n    \"lat\": -1.2921,\n    \"lng\": 36.8219\n  },\n  \"batteryLevel\": 85,\n  \"triggerType\": \"microphone\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/ORN-001/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"ORN-001",
+								"status"
+							]
+						},
+						"description": "The exact heartbeat ping the FastAPI edge firmware triggers on a 60s timer."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Status Manual (Dashboard)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"alert\",\n  \"batteryLevel\": 84\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/ORN-001/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"ORN-001",
+								"status"
+							]
+						},
+						"description": "Endpoint for manual dispatch adjustments via control dashboard."
+					},
+					"response": []
+				},
+				{
+					"name": "Activate Sentinel (Intruder Mode)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/ORN-001/activate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"ORN-001",
+								"activate"
+							]
+						},
+						"description": "Triggers threat scanning systems on the targeted edge Raspberry Pi device."
+					},
+					"response": []
+				},
+				{
+					"name": "Deactivate Sentinel (Sentry Mode)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/ORN-001/deactivate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"ORN-001",
+								"deactivate"
+							]
+						},
+						"description": "Puts the edge hardware back into acoustic sentry mode to preserve battery."
+					},
+					"response": []
+				},
+				{
+					"name": "Request Stream Start",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/ORN-001/stream/start",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"ORN-001",
+								"stream",
+								"start"
+							]
+						},
+						"description": "Initializes remote video playback stream."
+					},
+					"response": []
+				},
+				{
+					"name": "Request Stream Stop",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/sentinels/ORN-001/stream/stop",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sentinels",
+								"ORN-001",
+								"stream",
+								"stop"
+							]
+						},
+						"description": "Releases public live video playback tunnels."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Alerts Command Center",
+			"item": [
+				{
+					"name": "Create Threat Alert",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sentinelId\": \"ORN-001\",\n  \"threatType\": \"excavator\",\n  \"confidence\": 0.92,\n  \"location\": {\n    \"lat\": -1.2921,\n    \"lng\": 36.8219\n  },\n  \"triggerType\": \"ai\",\n  \"triggeredSensors\": [\"microphone\", \"camera\"],\n  \"imageData\": \"/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/alerts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"alerts"
+							]
+						},
+						"description": "Endpoint for reporting high-confidence threat triggers. Saves details, triggers SMS (Huawei SMN), uploads to cloud OBS, and broadcasts Socket.io events."
+					},
+					"response": []
+				},
+				{
+					"name": "List All Alerts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/alerts?limit=10&page=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"alerts"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Get alert log history with unified filters."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Alert Statistics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/alerts/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"alerts",
+								"stats"
+							]
+						},
+						"description": "Calculates daily counters, verification ratios, and threat occurrences."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Alert By ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/alerts/{{alert_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"alerts",
+								"{{alert_id}}"
+							]
+						},
+						"description": "Details query for a specific threat event."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Alert (Ranger Dispatch)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"isVerified\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/alerts/{{alert_id}}/verify",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"alerts",
+								"{{alert_id}}",
+								"verify"
+							]
+						},
+						"description": "Updates threat event status following physical verification check."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "alert_id",
+			"value": "65893e98124b89320fac8d01",
+			"type": "string"
+		}
+	]
+}

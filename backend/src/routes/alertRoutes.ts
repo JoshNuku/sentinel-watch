@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import {
-  createAlert,
   getAllAlerts,
   getAlertById,
   verifyAlert,
@@ -14,8 +13,6 @@ const router = Router();
  * Base path: /api/alerts
  */
 
-// POST /api/alerts - Create new alert (from Raspberry Pi)
-router.post('/', createAlert);
 
 // GET /api/alerts - Get all alerts with filtering and pagination
 router.get('/', getAllAlerts);

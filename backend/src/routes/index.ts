@@ -3,7 +3,8 @@ import sentinelRoutes from './sentinelRoutes';
 import alertRoutes from './alertRoutes';
 import streamRoutes from './streamRoutes';
 import { authenticate } from '../middleware/auth';
-import { registerSentinel, updateSentinelStatus, updateSentinelStatusPut } from '../controllers';
+import { verifyApiKey } from '../middleware/apiKey';
+import { registerSentinel, updateSentinelStatusPut } from '../controllers';
 import { createAlert } from '../controllers/alertController';
 
 const router = Router();
@@ -23,12 +24,10 @@ router.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-// Public IoT device endpoints (no auth required for Raspberry Pi devices)
-router.post('/sentinels/register', registerSentinel);
-// PUT from Raspberry Pi heartbeat should use the dedicated PUT handler
-router.put('/sentinels/:deviceId/status', updateSentinelStatusPut);
-router.patch('/sentinels/:deviceId/status', updateSentinelStatus);
-router.post('/alerts', createAlert);
+// Protected IoT device endpoints (require Edge API Key)
+router.post('/sentinels/register', verifyApiKey, registerSentinel);
+router.put('/sentinels/:deviceId/status', verifyApiKey, updateSentinelStatusPut);
+router.post('/alerts', verifyApiKey, createAlert);
 
 // Stream proxy (public - no auth required for video access)
 router.use('/stream', streamRoutes);

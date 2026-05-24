@@ -4,3 +4,5 @@
  */
 
 export { huaweiSMNService } from './huaweiSMN';
+export { huaweiOBSService } from './huaweiOBS';
+export { huaweiECSService } from './huaweiECS';

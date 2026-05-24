@@ -185,14 +185,26 @@ const Dashboard = () => {
       // Update the sentinel in the list
       setSentinels(prev => prev.map(s => 
         s.deviceId === data.deviceId 
-          ? { ...s, status: data.status }
+          ? { 
+              ...s, 
+              status: data.status,
+              ...(data.batteryLevel !== undefined && { batteryLevel: data.batteryLevel }),
+              ...(data.location && { location: data.location }),
+              ...(data.triggerType && { triggerType: data.triggerType })
+            }
           : s
       ));
       
       // Update selected sentinel if it's the one that changed
       setSelectedSentinel(prev => 
         prev?.deviceId === data.deviceId
-          ? { ...prev, status: data.status }
+          ? { 
+              ...prev, 
+              status: data.status,
+              ...(data.batteryLevel !== undefined && { batteryLevel: data.batteryLevel }),
+              ...(data.location && { location: data.location }),
+              ...(data.triggerType && { triggerType: data.triggerType })
+            }
           : prev
       );
     });
@@ -234,14 +246,6 @@ const Dashboard = () => {
   useEffect(() => {
     fetchSentinels();
     fetchAlertStats();
-
-    // Auto-refresh every 60 seconds (reduced frequency to lower backend load)
-    const intervalId = setInterval(() => {
-      fetchSentinels();
-      fetchAlertStats();
-    }, 60000);
-
-    return () => clearInterval(intervalId);
   }, [fetchSentinels, fetchAlertStats]);
 
   // Restore selection when navigated from LiveMap or from previous tab (sessionStorage)

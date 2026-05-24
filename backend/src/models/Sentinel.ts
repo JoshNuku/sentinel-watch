@@ -73,7 +73,7 @@ const SentinelSchema = new Schema<SentinelDocument>(
     triggerType: {
       type: String,
       trim: true,
-      enum: ['gpio', 'microphone', 'remote', 'ai']
+      enum: ['microphone', 'remote', 'ai']
     }
   },
   {

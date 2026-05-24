@@ -41,7 +41,7 @@ export interface Sentinel {
 export interface Alert {
   _id: string;
   sentinelId: string;
-  threatType: 'Excavator' | 'Water Pump' | 'Dredge' | 'Person' | 'person' | 'car' | 'truck' | 'motorcycle' | 'bus' | 'excavator' | 'chainsaw' | 'speech' | 'animal' | 'unknown' | 'Vehicle';
+  threatType: 'person' | 'car' | 'truck' | 'motorcycle' | 'bus' | 'excavator' | 'suspicious_noise';
   confidence: number;
   location: Location;
   timestamp: string;
@@ -317,10 +317,10 @@ export const healthCheck = async (): Promise<{ success: boolean; uptime: number 
 
 /**
  * Build video stream URL for a sentinel
- * Uses backend proxy to bypass ngrok warning page
+ * Uses backend proxy to bypass public warnings and aggregate stream traffic
  */
 export const getStreamUrl = (sentinel: Sentinel): string | null => {
-  // EXPERIMENTAL: Bypass ngrok completely if on the same local network
+  // If explicitly configured to bypass proxy for same local network direct connection
   const useLocalStream = import.meta.env.VITE_USE_LOCAL_STREAM === 'true';
   
   if (useLocalStream && sentinel.ipAddress) {
@@ -328,17 +328,19 @@ export const getStreamUrl = (sentinel: Sentinel): string | null => {
     return `http://${sentinel.ipAddress}:8080/stream`;
   }
 
-  // Use backend proxy for ngrok URLs
-  if (sentinel.streamUrl && sentinel.streamUrl.includes('ngrok')) {
-    return `${API_BASE_URL}/stream/${sentinel.deviceId}`;
-  }
-  
-  // If streamUrl is provided and not ngrok, use it directly
-  if (sentinel.streamUrl) {
+  // Cloudflare Quick Tunnels serve secure HTTPS out of the box with zero warning screens.
+  // We can load them directly in the browser to completely bypass backend CPU/bandwidth overhead!
+  if (sentinel.streamUrl && (sentinel.streamUrl.includes('trycloudflare') || sentinel.streamUrl.includes('cloudflare'))) {
     return sentinel.streamUrl;
   }
 
-  // If ipAddress is available as fallback
+  // If the stream URL is a local LAN IP, we MUST proxy it through the backend to avoid 
+  // browser Mixed Content (HTTP-in-HTTPS) and CORS blocks in production.
+  if (sentinel.streamUrl) {
+    return `${API_BASE_URL}/stream/${sentinel.deviceId}`;
+  }
+
+  // Fallback direct LAN URL if no active tunnel stream URL is registered yet
   if (sentinel.ipAddress) {
     return `http://${sentinel.ipAddress}:8080/stream`;
   }

@@ -143,8 +143,8 @@ Verify and respond via dashboard.
       alerts.map(alert => this.sendAlertSMS(alert))
     );
 
-    const successful = results.filter(r => r.status === 'fulfilled').length;
-    const failed = results.filter(r => r.status === 'rejected').length;
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+    const failed = alerts.length - successful;
 
     console.log(`✅ ${successful} alerts sent successfully`);
     if (failed > 0) {

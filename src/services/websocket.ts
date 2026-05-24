@@ -21,6 +21,9 @@ export interface AlertVerifiedEvent {
 export interface SentinelStatusUpdateEvent {
   deviceId: string;
   status: 'active' | 'inactive' | 'alert';
+  batteryLevel?: number;
+  location?: { lat: number; lng: number };
+  triggerType?: 'microphone' | 'remote' | 'ai';
 }
 
 export interface StartStreamEvent {
@@ -177,6 +180,22 @@ class WebSocketService {
 
     return () => {
       this.socket?.off('start-stream', callback);
+    };
+  }
+
+  /**
+   * Subscribe to alert-updated events (emitted by backend when alert is updated, e.g. OBS upload completed)
+   */
+  onAlertUpdated(callback: (data: Alert) => void): () => void {
+    if (!this.socket) {
+      console.warn('WebSocket not connected. Call connect() first.');
+      return () => {};
+    }
+
+    this.socket.on('alert-updated', callback);
+
+    return () => {
+      this.socket?.off('alert-updated', callback);
     };
   }
 

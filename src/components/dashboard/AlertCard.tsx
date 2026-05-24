@@ -1,6 +1,6 @@
 import { type Alert } from "@/services/api";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, AlertTriangle, Truck, Droplets, Construction, User, Bike, Bus } from "lucide-react";
+import { CheckCircle, AlertTriangle, Truck, Droplets, Construction, User, Bike, Bus, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
@@ -10,25 +10,15 @@ interface AlertCardProps {
   verifying?: boolean;
 }
 
-// Map threat types from both old system and new Pi system
+// Map active threat types
 const threatIcons: Record<string, any> = {
-  // Old threat types
-  Excavator: Construction,
-  Vehicle: Truck,
-  "Water Pump": Droplets,
-  Dredge: Construction,
-  // New Pi threat types (lowercase)
   person: User,
-  Person: User,
   car: Truck,
   truck: Truck,
   motorcycle: Bike,
   bus: Bus,
   excavator: Construction,
-  chainsaw: Construction,
-  speech: User,
-  animal: AlertTriangle,
-  unknown: AlertTriangle,
+  suspicious_noise: Volume2,
 };
 
 const getTimeAgo = (timestamp: string) => {
