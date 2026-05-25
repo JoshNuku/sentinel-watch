@@ -127,10 +127,17 @@ const Dashboard = () => {
     wsService.connect();
     setWsConnected(wsService.isConnected());
 
-    // Listen for connection status changes
+    // Listen for connection status changes and perform fallback polling if disconnected
     const checkConnection = setInterval(() => {
-      setWsConnected(wsService.isConnected());
-    }, 10000); // check less frequently to reduce load
+      const isConnected = wsService.isConnected();
+      setWsConnected(isConnected);
+      
+      if (!isConnected) {
+        console.log('🔄 WebSocket not connected. Falling back to active polling.');
+        fetchSentinels();
+        fetchAlertStats();
+      }
+    }, 15000); // Check and poll fallback every 15 seconds
 
     // Subscribe to new alert events
     const unsubscribeAlerts = wsService.onNewAlert((data: NewAlertEvent) => {

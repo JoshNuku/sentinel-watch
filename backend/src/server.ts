@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+// Load environment variables
+dotenv.config();
+
 import express, { Application, Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
@@ -6,13 +10,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-
-// Load environment variables
-dotenv.config();
 
 // Import configurations and routes
 import { connectDatabase } from './config/database';

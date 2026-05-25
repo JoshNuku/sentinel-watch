@@ -83,8 +83,7 @@ const SentinelSchema = new Schema<SentinelDocument>(
   }
 );
 
-// Index for faster queries
-SentinelSchema.index({ deviceId: 1 });
+// Indexes for faster queries
 SentinelSchema.index({ status: 1 });
 SentinelSchema.index({ lastSeen: -1 });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { alertAPI, getImageUrl, type Alert } from "@/services/api";
 import { wsService } from "@/services/websocket";
@@ -59,6 +59,20 @@ const Alerts = () => {
   const [verifying, setVerifying] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile screen sizes (lg breakpoint in tailwind is 1024px)
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Auto-refresh timer for accurate 'time ago'
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -88,6 +102,20 @@ const Alerts = () => {
     // Connect to WebSocket for real-time alerts
     wsService.connect();
 
+    // Set up fallback polling if WebSocket is offline
+    const checkConnection = setInterval(() => {
+      if (!wsService.isConnected()) {
+        console.log('🔄 WebSocket not connected. Polling alerts history fallback...');
+        alertAPI.getAll({ limit: 50 })
+          .then(response => {
+            if (response.success && response.data) {
+              setAlerts(response.data);
+            }
+          })
+          .catch(err => console.error('Failed fallback polling alerts:', err));
+      }
+    }, 15000);
+
     // Listen for new alerts
     const unsubscribeNew = wsService.onNewAlert((data) => {
       console.log('📡 New alert received via WebSocket:', data);
@@ -108,6 +136,7 @@ const Alerts = () => {
 
     // Cleanup on unmount
     return () => {
+      clearInterval(checkConnection);
       unsubscribeNew();
       unsubscribeUpdated();
     };
@@ -121,6 +150,11 @@ const Alerts = () => {
       const match = alerts.find(a => a._id === alertId);
       if (match) {
         setSelectedAlert(match);
+        if (isMobile) {
+          setTimeout(() => {
+            detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 200);
+        }
         // clear navigation state so selecting again doesn't retrigger
         try {
           navigate(location.pathname, { replace: true, state: {} });
@@ -129,7 +163,7 @@ const Alerts = () => {
         }
       }
     }
-  }, [alerts, location, navigate]);
+  }, [alerts, location, navigate, isMobile]);
 
   const handleVerify = async (alertId: string, isVerified: boolean) => {
     try {
@@ -260,7 +294,7 @@ const Alerts = () => {
       {/* Alerts Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Alerts List */}
-        <div className="lg:col-span-2 space-y-3">
+        <div ref={listRef} className="lg:col-span-2 space-y-3">
           {loading ? (
             <div className="glass rounded-xl p-8 text-center">
               <Loader2 className="h-12 w-12 mx-auto mb-4 text-primary animate-spin" />
@@ -280,7 +314,14 @@ const Alerts = () => {
               return (
                 <div 
                   key={alert._id}
-                  onClick={() => setSelectedAlert(alert)}
+                  onClick={() => {
+                    setSelectedAlert(alert);
+                    if (isMobile) {
+                      setTimeout(() => {
+                        detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }, 100);
+                    }
+                  }}
                   className={cn(
                     "glass rounded-xl p-4 cursor-pointer transition-all duration-200 hover:bg-card/80",
                     isSelected && "ring-2 ring-primary bg-primary/5",
@@ -342,8 +383,18 @@ const Alerts = () => {
         </div>
 
         {/* Alert Details Panel */}
-        <div className="lg:col-span-1">
+        <div ref={detailsRef} className="lg:col-span-1">
           <div className="glass rounded-xl p-4 sticky top-6">
+            {isMobile && selectedAlert && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="mb-4 w-full justify-start text-muted-foreground hover:text-foreground pl-0"
+                onClick={() => listRef.current?.scrollIntoView({ behavior: "smooth" })}
+              >
+                ← Back to Alert List
+              </Button>
+            )}
             <h3 className="font-semibold mb-4 flex items-center gap-2">
               <Bell className="h-4 w-4 text-primary" />
               Alert Details
