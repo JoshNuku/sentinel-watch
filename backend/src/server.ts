@@ -52,7 +52,10 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: [FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'],
+  origin: (_origin, callback) => {
+    // Allow any origin dynamically
+    callback(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -91,7 +94,10 @@ app.use('/api/auth', limiter);
 
 const io = new SocketServer(httpServer, {
   cors: {
-    origin: [FRONTEND_URL, 'http://localhost:8080', 'http://localhost:3000'],
+    origin: (_origin, callback) => {
+      // Allow any origin dynamically
+      callback(null, true);
+    },
     methods: ['GET', 'POST'],
     credentials: true
   },
