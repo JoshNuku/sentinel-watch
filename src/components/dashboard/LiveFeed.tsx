@@ -326,6 +326,12 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
 
     return () => {
       cleanupTimers();
+      if (activatedSentinelRef.current) {
+        console.log(`🔴 Component unmounting, auto-deactivating sentinel ${activatedSentinelRef.current}...`);
+        sentinelAPI.deactivate(activatedSentinelRef.current).catch(err => {
+          console.error("Failed to deactivate on unmount:", err);
+        });
+      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sentinel?.deviceId, sentinel?.status, sentinel?.streamUrl, isManualRequested, deactivateSentinel, cleanupTimers, onStreamStateChange, startKeepAlive]);

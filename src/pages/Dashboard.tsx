@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { sentinelAPI, alertAPI, getStreamUrl, type Sentinel } from "@/services/api";
 import { sentinels as dummySentinels } from "@/lib/dummy-data";
 import { wsService, type NewAlertEvent, type StartStreamEvent } from "@/services/websocket";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sentinels, setSentinels] = useState<Sentinel[]>([]);
   const [selectedSentinel, setSelectedSentinel] = useState<Sentinel | null>(null);
   const [isStreamActive, setIsStreamActive] = useState(false);
@@ -25,10 +26,16 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [activeFeeds, setActiveFeeds] = useState<Sentinel[]>([]);
+  const [multiFeedMode] = useState<boolean>(() => {
+    return localStorage.getItem('multiFeedMode') === 'true';
+  });
   const { toast } = useToast();
   
   // last fetch timestamp to throttle background calls
   const lastFetchRef = useRef<number>(0);
+
+  const isFirstFetchRef = useRef(true);
 
   // Fetch sentinels from backend
   const fetchSentinels = useCallback(async () => {
@@ -41,7 +48,7 @@ const Dashboard = () => {
     try {
       // Don't set loading on poll updates to avoid UI flicker
       // only set loading on initial fetch
-      if (sentinels.length === 0) setLoading(true);
+      if (isFirstFetchRef.current) setLoading(true);
       setError(null);
 
       const response = await sentinelAPI.getAll();
@@ -49,21 +56,26 @@ const Dashboard = () => {
 
       if (response.success && response.data) {
         setSentinels(response.data);
+        isFirstFetchRef.current = false;
 
         // If a sentinel was previously selected, update it with new data
-        if (selectedSentinel) {
+        setSelectedSentinel(prev => {
+          if (!prev) return null;
           const updatedSelected = response.data.find(
-            s => s.deviceId === selectedSentinel.deviceId
+            s => s.deviceId === prev.deviceId
           );
-          // Only update if found, otherwise keep existing (might be temporary glitch)
-          if (updatedSelected) {
-            setSelectedSentinel(updatedSelected);
-          }
-        }
+          return updatedSelected || prev;
+        });
+
+        // Update active feeds list with latest fetched details
+        setActiveFeeds(prev => prev.map(f => {
+          const latest = response.data.find(s => s.deviceId === f.deviceId);
+          return latest || f;
+        }));
       }
     } catch (err) {
       console.error("Failed to fetch sentinels:", err);
-      if (sentinels.length === 0) {
+      if (isFirstFetchRef.current) {
         setError("Failed to connect to backend. Please check connection.");
 
         // Dev-friendly fallback so the map still shows markers
@@ -81,7 +93,7 @@ const Dashboard = () => {
       setLoading(false);
       lastFetchRef.current = Date.now();
     }
-  }, [selectedSentinel, sentinels.length]);
+  }, []);
 
 
   // Fetch alert statistics
@@ -99,18 +111,66 @@ const Dashboard = () => {
     }
   }, []);
 
+  // Stop a live feed (used in grid close or stop feed)
+  const handleStopFeed = useCallback((s: Sentinel) => {
+    setActiveFeeds(prev => prev.filter(f => f.deviceId !== s.deviceId));
+    setSelectedSentinel(prev => prev?.deviceId === s.deviceId ? null : prev);
+  }, []);
+
   // Shared handler for requesting a live stream (used by Grid and Map)
   const handleViewStream = useCallback(async (s: Sentinel) => {
     setSelectedSentinel(s);
     setManualRequestingDevice(s.deviceId);
+
+    // Limit active feeds in Multi-Feed Mode
+    if (multiFeedMode) {
+      const alreadyStreaming = activeFeeds.some(f => f.deviceId === s.deviceId);
+      if (!alreadyStreaming && activeFeeds.length >= 4) {
+        toast({ 
+          title: 'Maximum feeds reached', 
+          description: 'Cannot view more than 4 feeds simultaneously to optimize performance.', 
+          variant: 'destructive' 
+        });
+        setManualRequestingDevice(null);
+        return;
+      }
+    }
+
     try {
       const res = await sentinelAPI.requestStream(s.deviceId);
       if (res && res.success && res.data?.streamUrl) {
-        setSelectedSentinel(prev => prev ? { ...prev, streamUrl: res.data!.streamUrl } : prev);
+        const streamUrl = res.data.streamUrl;
+        
+        setSelectedSentinel(prev => prev?.deviceId === s.deviceId ? { ...prev, streamUrl } : prev);
         setIsStreamActive(true);
+
+        setActiveFeeds(prev => {
+          const newFeed = { ...s, streamUrl };
+          if (multiFeedMode) {
+            const updated = prev.map(f => f.deviceId === s.deviceId ? { ...f, ...newFeed } : f);
+            if (!updated.some(f => f.deviceId === s.deviceId)) {
+              updated.push(newFeed);
+            }
+            return updated;
+          } else {
+            return [newFeed];
+          }
+        });
+
         fetchSentinels();
         toast({ title: 'Stream started', description: `${s.deviceId} stream available` });
       } else if (res && res.success) {
+        // Even if URL is not yet ready, add to activeFeeds so LiveFeed is mounted and shows activating/loading
+        setActiveFeeds(prev => {
+          if (multiFeedMode) {
+            if (!prev.some(f => f.deviceId === s.deviceId)) {
+              return [...prev, s];
+            }
+            return prev;
+          } else {
+            return [s];
+          }
+        });
         toast({ title: 'Stream requested', description: `Waiting for ${s.deviceId} to publish stream`, variant: 'default' });
       }
     } catch (err) {
@@ -119,7 +179,7 @@ const Dashboard = () => {
     } finally {
       setTimeout(() => setManualRequestingDevice(null), 5000);
     }
-  }, [fetchSentinels, toast]);
+  }, [fetchSentinels, activeFeeds, multiFeedMode, toast]);
 
   // Setup WebSocket connection and listeners
   useEffect(() => {
@@ -155,6 +215,22 @@ const Dashboard = () => {
       if (data.sentinel) {
         console.log('📡 Selecting alerted sentinel with fresh data:', data.sentinel.deviceId);
         setSelectedSentinel(data.sentinel);
+
+        // Sync active feeds with alert event details
+        setActiveFeeds(prev => {
+          if (multiFeedMode) {
+            if (prev.length >= 4 && !prev.some(f => f.deviceId === data.sentinel.deviceId)) {
+              return prev; // limit exceeded
+            }
+            const updated = prev.map(f => f.deviceId === data.sentinel.deviceId ? { ...f, ...data.sentinel } : f);
+            if (!updated.some(f => f.deviceId === data.sentinel.deviceId)) {
+              updated.push(data.sentinel);
+            }
+            return updated;
+          } else {
+            return [data.sentinel];
+          }
+        });
 
         // If the sentinel has a streamUrl, auto-start the stream without requiring manual request
         if (data.sentinel.streamUrl) {
@@ -214,6 +290,19 @@ const Dashboard = () => {
             }
           : prev
       );
+
+      // Update active feeds list status
+      setActiveFeeds(prev => prev.map(f => 
+        f.deviceId === data.deviceId 
+          ? { 
+              ...f, 
+              status: data.status,
+              ...(data.batteryLevel !== undefined && { batteryLevel: data.batteryLevel }),
+              ...(data.location && { location: data.location }),
+              ...(data.triggerType && { triggerType: data.triggerType })
+            }
+          : f
+      ));
     });
 
     // Subscribe to start-stream events (backend sends this when alert has a stored streamUrl)
@@ -237,6 +326,13 @@ const Dashboard = () => {
         }
         return prev;
       });
+
+      // Update active feeds list streamUrl
+      setActiveFeeds(prev => prev.map(f => 
+        f.deviceId === data.deviceId
+          ? { ...f, streamUrl: data.streamUrl }
+          : f
+      ));
     });
 
     // Cleanup on unmount
@@ -247,7 +343,7 @@ const Dashboard = () => {
       unsubscribeStartStream();
       clearInterval(checkConnection);
     };
-  }, [fetchSentinels, fetchAlertStats, toast]);
+  }, [fetchSentinels, fetchAlertStats, multiFeedMode, toast]);
 
   // Initial data fetch
   useEffect(() => {
@@ -256,10 +352,11 @@ const Dashboard = () => {
   }, [fetchSentinels, fetchAlertStats]);
 
   // Restore selection when navigated from LiveMap or from previous tab (sessionStorage)
+  const hasRestoredSelection = useRef(false);
   const hasRestoredStreamInit = useRef(false);
 
   useEffect(() => {
-    if (sentinels.length === 0) return;
+    if (sentinels.length === 0 || hasRestoredSelection.current) return;
 
     const state = location.state as { sentinelId?: string, autoStartStream?: boolean } | null;
     const targetId = state?.sentinelId || sessionStorage.getItem('selectedSentinelId');
@@ -268,15 +365,28 @@ const Dashboard = () => {
       const match = sentinels.find(s => s.deviceId === targetId);
       if (match) {
         setSelectedSentinel(match);
+        hasRestoredSelection.current = true;
 
         // Auto-start stream if navigated from LiveMap with that intent
         if (state?.autoStartStream && !hasRestoredStreamInit.current) {
           hasRestoredStreamInit.current = true;
           handleViewStream(match);
         }
+
+        // clear navigation state so selecting again doesn't retrigger
+        if (state?.sentinelId) {
+          try {
+            navigate(location.pathname, { replace: true, state: {} });
+          } catch (e) {
+            // ignore
+          }
+        }
       }
+    } else {
+      // No target to restore, mark as completed
+      hasRestoredSelection.current = true;
     }
-  }, [sentinels, location.state, handleViewStream]);
+  }, [sentinels, location.state, handleViewStream, navigate]);
 
   // Persist selection for tab switches
   useEffect(() => {
@@ -385,16 +495,41 @@ const Dashboard = () => {
           />
         </div>
 
-        <div id="feed-container" className="lg:col-span-2 h-[480px]">
-          <LiveFeed 
-            sentinel={selectedSentinel}
-            externalManualRequest={manualRequestingDevice === selectedSentinel?.deviceId}
-            onClose={() => {
-              setSelectedSentinel(null);
-              setIsStreamActive(false);
-            }}
-            onStreamStateChange={setIsStreamActive}
-          />
+        <div id="feed-container" className="lg:col-span-2 h-[480px] overflow-y-auto pr-1">
+          {multiFeedMode ? (
+            <div className={`grid gap-4 ${activeFeeds.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} ${activeFeeds.length <= 2 ? 'h-full' : 'h-auto pb-4'}`}>
+              {activeFeeds.length === 0 ? (
+                <LiveFeed 
+                  sentinel={null} 
+                  onClose={() => {}}
+                />
+              ) : (
+                activeFeeds.map(s => (
+                  <div key={s.deviceId} className="h-full min-h-[220px] max-h-[480px]">
+                    <LiveFeed 
+                      sentinel={s}
+                      externalManualRequest={manualRequestingDevice === s.deviceId}
+                      onClose={() => handleStopFeed(s)}
+                      onStreamStateChange={(active) => {
+                        setIsStreamActive(activeFeeds.some(f => f.streamUrl !== null));
+                      }}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <LiveFeed 
+              sentinel={selectedSentinel}
+              externalManualRequest={manualRequestingDevice === selectedSentinel?.deviceId}
+              onClose={() => {
+                setSelectedSentinel(null);
+                setIsStreamActive(false);
+                setActiveFeeds([]);
+              }}
+              onStreamStateChange={setIsStreamActive}
+            />
+          )}
         </div>
       </div>
     </div>

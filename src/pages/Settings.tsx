@@ -4,9 +4,11 @@ import {
   Shield, 
   User, 
   Mail,
-  Loader2
+  Loader2,
+  Sliders
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +35,16 @@ const Settings = () => {
     newPassword: '',
     confirmPassword: '',
   });
+
+  const [multiFeedMode, setMultiFeedMode] = useState<boolean>(() => {
+    return localStorage.getItem('multiFeedMode') === 'true';
+  });
+
+  const handleToggleMultiFeed = (checked: boolean) => {
+    setMultiFeedMode(checked);
+    localStorage.setItem('multiFeedMode', checked ? 'true' : 'false');
+    toast.success(`Multi-Feed Mode ${checked ? 'enabled' : 'disabled'}`);
+  };
 
   const handleUpdateProfile = async () => {
     if (!profileData.name.trim()) {
@@ -172,6 +184,10 @@ const Settings = () => {
             <Shield className="h-4 w-4" />
             <span>Security</span>
           </TabsTrigger>
+          <TabsTrigger value="preferences" className="flex items-center gap-2 data-[state=active]:bg-primary/10">
+            <Sliders className="h-4 w-4" />
+            <span>Preferences</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Account Tab */}
@@ -275,6 +291,30 @@ const Settings = () => {
                     'Update Password'
                   )}
                 </Button>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Preferences Tab */}
+        <TabsContent value="preferences" className="space-y-6">
+          <div className="glass rounded-xl p-6 space-y-6 max-w-2xl">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Sliders className="h-4 w-4 text-primary" />
+              Surveillance Preferences
+            </h3>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg border border-border/50">
+                <div className="space-y-0.5 pr-4">
+                  <Label className="text-base">Multi-Feed View Mode</Label>
+                  <p className="text-muted-foreground text-sm">
+                    Allow viewing multiple live camera feeds simultaneously in a grid view (maximum of 4 streams).
+                  </p>
+                </div>
+                <Switch 
+                  checked={multiFeedMode} 
+                  onCheckedChange={handleToggleMultiFeed}
+                />
               </div>
             </div>
           </div>
