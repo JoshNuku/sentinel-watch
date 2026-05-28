@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllSentinels, getSentinelById, updateSentinelStatus, activateSentinel, deactivateSentinel, sendKeepAlive, getPiStatus, requestStreamStart, requestStreamStop } from '../controllers/sentinelController';
+import { getAllSentinels, getSentinelById, updateSentinelStatus, activateSentinel, deactivateSentinel, sendKeepAlive, getPiStatus, requestStreamStart, requestStreamStop, restartSentinelService } from '../controllers/sentinelController';
 
 const router = Router();
 
@@ -36,6 +36,9 @@ router.post('/:deviceId/stream/start', requestStreamStart);
 
 // POST /api/sentinels/:deviceId/stream/stop - Request stream stop
 router.post('/:deviceId/stream/stop', requestStreamStop);
+
+// POST /api/sentinels/:deviceId/restart - Restart sentinel service
+router.post('/:deviceId/restart', restartSentinelService);
 
 // GET /api/sentinels/:deviceId - Get specific sentinel (generic, placed last)
 router.get('/:deviceId', getSentinelById);

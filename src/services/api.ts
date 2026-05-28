@@ -213,6 +213,15 @@ export const sentinelAPI = {
       streamIdleSeconds: number;
     }>>(`/sentinels/${deviceId}/pi-status`);
   },
+
+  /**
+   * Request Raspberry Pi sentinel service restart
+   */
+  restartService: async (deviceId: string): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+    return fetchAPI<ApiResponse<{ success: boolean; message: string }>>(`/sentinels/${deviceId}/restart`, {
+      method: 'POST',
+    });
+  },
 };
 
 /**

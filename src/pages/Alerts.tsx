@@ -124,7 +124,17 @@ const Alerts = () => {
         if (exists) return prev;
         return [data.alert, ...prev];
       });
-      toast.success(`New ${data.alert.threatType} detected by ${data.alert.sentinelId}!`);
+      toast.success(`New ${data.alert.threatType} detected by ${data.alert.sentinelId}!`, {
+        description: "Click to view details",
+        onClick: () => {
+          setSelectedAlert(data.alert);
+          if (isMobile) {
+            setTimeout(() => {
+              detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 100);
+          }
+        }
+      });
     });
 
     // Listen for alert updates (e.g. image uploaded to OBS)

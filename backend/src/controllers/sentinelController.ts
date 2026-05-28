@@ -874,3 +874,66 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
     });
   }
 };
+
+/**
+ * POST /api/sentinels/:deviceId/restart
+ * Restart the Raspberry Pi sentinel service
+ */
+export const restartSentinelService = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { deviceId } = req.params;
+
+    const sentinel = await Sentinel.findOne({ deviceId: deviceId.toUpperCase() });
+
+    if (!sentinel) {
+      res.status(404).json({
+        success: false,
+        message: `Sentinel ${deviceId} not found`
+      });
+      return;
+    }
+
+    if (!sentinel.streamUrl) {
+      res.status(400).json({
+        success: false,
+        message: `Sentinel ${deviceId} has no stream URL configured`
+      });
+      return;
+    }
+
+    // Extract base URL from stream URL
+    const baseUrl = sentinel.streamUrl.replace('/stream', '');
+    
+    console.info(`[SentinelController] Requesting service restart for sentinel ${deviceId} at ${baseUrl}/control/restart`);
+
+    try {
+      const response = await fetch(`${baseUrl}/control/restart`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const data = await response.json() as { success: boolean; message?: string };
+        res.status(200).json({
+          success: true,
+          message: data.message || `Sentinel ${deviceId} service restart requested`
+        });
+      } else {
+        throw new Error(`Pi responded with status ${response.status}`);
+      }
+    } catch (fetchError) {
+      console.error(`❌ Failed to request restart on Pi for ${deviceId}:`, fetchError);
+      res.status(503).json({
+        success: false,
+        message: `Failed to contact sentinel — device may be offline`,
+        error: fetchError instanceof Error ? fetchError.message : 'Unknown error'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error requesting sentinel restart:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to request sentinel service restart',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};

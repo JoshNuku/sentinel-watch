@@ -28,6 +28,8 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
   const [isActivating, setIsActivating] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [showThreatOverlay, setShowThreatOverlay] = useState(false);
+  const [latestAlertId, setLatestAlertId] = useState<string | null>(null);
+  const [isRestarting, setIsRestarting] = useState(false);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -257,6 +259,26 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
     }
   };
 
+  // Restart sentinel Pi service
+  const handleRestartService = async () => {
+    if (!sentinel) return;
+    try {
+      setIsRestarting(true);
+      const res = await sentinelAPI.restartService(sentinel.deviceId);
+      if (res.success) {
+        toast.success(`Service restart requested successfully!`, {
+          description: "The sentinel service will restart in 5 seconds."
+        });
+      } else {
+        toast.error(res.message || "Failed to restart sentinel service");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to contact sentinel service");
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
 
 
   // Update stream URL when sentinel changes
@@ -342,6 +364,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
     (async () => {
       if (!sentinel) {
         setShowThreatOverlay(false);
+        setLatestAlertId(null);
         return;
       }
 
@@ -351,13 +374,19 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
         if (!mounted) return;
         if (latest) {
           const ageMs = Date.now() - new Date(latest.timestamp).getTime();
-          setShowThreatOverlay(ageMs < 2 * 60 * 1000);
+          const active = ageMs < 2 * 60 * 1000;
+          setShowThreatOverlay(active);
+          setLatestAlertId(active ? latest._id : null);
         } else {
           setShowThreatOverlay(false);
+          setLatestAlertId(null);
         }
       } catch (err) {
         console.error('Failed to fetch latest alert for threat overlay check', err);
-        if (mounted) setShowThreatOverlay(false);
+        if (mounted) {
+          setShowThreatOverlay(false);
+          setLatestAlertId(null);
+        }
       }
     })();
 
@@ -576,7 +605,20 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
                     {/* Threat overlay */}
                     {showThreatOverlay && (
                       <div className="absolute inset-0 flex items-start justify-center pointer-events-none z-20">
-                        <div className="mt-6 bg-destructive/80 text-white px-3 py-1 rounded-md font-bold">THREAT DETECTED</div>
+                        <button
+                          onClick={() => {
+                            if (latestAlertId) {
+                              navigate("/dashboard/alerts", { state: { alertId: latestAlertId } });
+                            } else {
+                              navigate("/dashboard/alerts");
+                            }
+                          }}
+                          className="mt-6 bg-destructive/90 hover:bg-destructive text-white px-4 py-1.5 rounded-md font-bold shadow-md cursor-pointer transition-all hover:scale-105 active:scale-95 pointer-events-auto flex items-center gap-1.5 border border-white/20"
+                          title="Click to view alert details"
+                        >
+                          <AlertCircle className="h-4 w-4 animate-pulse" />
+                          THREAT DETECTED
+                        </button>
                       </div>
                     )}
 
@@ -626,6 +668,16 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
       {/* Action Buttons */}
       {sentinel && (streamUrl || isManualRequested) && !imageError && (
         <div className="flex gap-2 mt-4">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex-1 gap-2 border-warning/30 hover:border-warning/50 hover:bg-warning/10 text-warning"
+            onClick={handleRestartService}
+            disabled={isRestarting}
+          >
+            <RefreshCw className={`h-4 w-4 ${isRestarting ? 'animate-spin' : ''}`} />
+            {isRestarting ? 'Restarting...' : 'Restart Service'}
+          </Button>
 
           <Button 
             variant="outline" 

@@ -203,11 +203,16 @@ const Dashboard = () => {
     const unsubscribeAlerts = wsService.onNewAlert((data: NewAlertEvent) => {
       console.log('🚨 New alert received:', data);
       
-      // Show toast notification
       toast({
         title: "🚨 New Threat Detected!",
         description: `${data.alert.threatType} detected by ${data.alert.sentinelId}`,
         variant: "destructive",
+        className: "cursor-pointer hover:bg-red-950/20 dark:hover:bg-red-950/40 transition-colors border-destructive/50",
+        onClick: (e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('[toast-close]')) return;
+          navigate("/dashboard/alerts", { state: { alertId: data.alert._id } });
+        }
       });
 
       // Auto-select the sentinel with the alert immediately using fresh data from event
