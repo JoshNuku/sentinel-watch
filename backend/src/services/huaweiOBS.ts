@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 
 interface OBSConfig {
   accessKey: string;
@@ -39,7 +40,7 @@ class HuaweiOBSService {
    * If Huawei OBS is configured, uploads directly to OBS bucket.
    * Otherwise, falls back to local disk storage.
    */
-  async uploadAlertImage(alertId: string, imageBuffer: Buffer): Promise<string> {
+  async uploadAlertImage(alertId: string, imageBuffer: Buffer, localFilePath?: string | null): Promise<string> {
     if (this.isConfigured) {
       try {
         // REAL OBS IMPLEMENTATION (when credentials are present):
@@ -57,12 +58,25 @@ class HuaweiOBSService {
         const objectKey = `alerts/${alertId}.jpg`;
         console.info(`[HuaweiOBS] Starting real OBS Upload for alert: ${alertId} to bucket: ${this.config.bucketName}`);
         
-        const result = await obsClient.putObject({
+        let uploadParams: any = {
           Bucket: this.config.bucketName,
           Key: objectKey,
-          Body: imageBuffer,
           ContentType: 'image/jpeg'
-        });
+        };
+
+        // Bypass the esdk-obs-nodejs string conversion bug by avoiding raw Buffers in Body.
+        // We either stream directly from the file path using SourceFile,
+        // or wrap the buffer in a node Readable Stream with explicit ContentLength.
+        if (localFilePath && fs.existsSync(localFilePath)) {
+          console.info(`[HuaweiOBS] Bypassing buffer-to-string bug by uploading directly from filesystem path: ${localFilePath}`);
+          uploadParams.SourceFile = localFilePath;
+        } else {
+          console.info(`[HuaweiOBS] Bypassing buffer-to-string bug by wrapping memory buffer in a Readable Stream of size ${imageBuffer.length}`);
+          uploadParams.Body = Readable.from(imageBuffer);
+          uploadParams.ContentLength = imageBuffer.length;
+        }
+
+        const result = await obsClient.putObject(uploadParams);
 
         if (result.CommonMsg && result.CommonMsg.Status < 300) {
           console.info(`[HuaweiOBS] Upload successful for alert: ${alertId}`);

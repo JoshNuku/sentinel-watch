@@ -99,7 +99,7 @@ export class AlertWorker {
             }
 
             if (imageBuffer) {
-              const uploadedUrl = await huaweiOBSService.uploadAlertImage(alert._id.toString(), imageBuffer);
+              const uploadedUrl = await huaweiOBSService.uploadAlertImage(alert._id.toString(), imageBuffer, localFilePath);
               
               // Clean up the local file after successful OBS upload to save disk space
               if (localFilePath && fs.existsSync(localFilePath)) {
