@@ -694,10 +694,10 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
       {/* Action Buttons */}
       {sentinel && (
         <div className="flex flex-wrap gap-2 mt-4">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex-1 min-w-[120px] sm:min-w-[140px] lg:min-w-0 gap-2 border-warning/30 hover:border-warning/50 hover:bg-warning/10 text-warning"
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 gap-2 border-warning/30 hover:border-warning/50 hover:bg-warning/10 text-warning"
             onClick={handleRestartService}
             disabled={isRestarting}
           >
@@ -707,33 +707,33 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
 
           {(streamUrl || isManualRequested) && !imageError && (
             <>
-              <Button 
-                variant="glow" 
-                size="sm" 
-                className="flex-1 min-w-[120px] sm:min-w-[140px] lg:min-w-0 gap-2 bg-primary/20 hover:bg-primary/30 border-primary/30"
+              <Button
+                variant="glow"
+                size="sm"
+                className="flex-1"
                 onClick={handleVerifyVision}
                 disabled={isVerifying}
               >
                 <Eye className={`h-4 w-4 ${isVerifying ? 'animate-pulse' : ''}`} />
                 {isVerifying ? 'Analyzing...' : 'Verify with AI'}
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="flex-1 min-w-[100px] sm:min-w-[120px] lg:min-w-0 gap-2"
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:border-destructive/60"
                 onClick={handleStopStream}
                 disabled={isDeactivating}
               >
                 <Power className="h-4 w-4" />
                 {isDeactivating ? 'Stopping...' : 'Stop Feed'}
               </Button>
-              <Button 
-                variant="glow" 
-                size="sm" 
-                className="flex-1 min-w-[100px] sm:min-w-[120px] lg:min-w-0"
+              <Button
+                variant="default"
+                size="sm"
+                className="flex-1"
                 onClick={handleFullscreen}
               >
-                <Maximize className="mr-2 h-4 w-4" /> Full Screen
+                <Maximize className="h-4 w-4" /> Full Screen
               </Button>
             </>
           )}
