@@ -27,7 +27,9 @@ export const initiateStream = async (deviceId: string): Promise<{ success: boole
     // Determine base URL for control endpoints
     let baseUrl: string | null = null;
     if (sentinel.streamUrl) {
-      baseUrl = sentinel.streamUrl.replace('/stream', '');
+      baseUrl = sentinel.streamUrl.endsWith('/stream')
+        ? sentinel.streamUrl.slice(0, -'/stream'.length)
+        : sentinel.streamUrl;
     } else if (sentinel.ipAddress) {
       baseUrl = `http://${sentinel.ipAddress}:3000`;
     }
@@ -415,7 +417,9 @@ export const activateSentinel = async (req: Request, res: Response): Promise<voi
     }
 
     // Extract base URL from stream URL (remove /stream suffix)
-    const baseUrl = sentinel.streamUrl.replace('/stream', '');
+    const baseUrl = sentinel.streamUrl.endsWith('/stream')
+      ? sentinel.streamUrl.slice(0, -'/stream'.length)
+      : sentinel.streamUrl;
     
     console.info(`[SentinelController] Activating sentinel ${deviceId} - calling ${baseUrl}/control/activate`);
 
@@ -499,7 +503,9 @@ export const deactivateSentinel = async (req: Request, res: Response): Promise<v
     }
 
     // Extract base URL from stream URL
-    const baseUrl = sentinel.streamUrl.replace('/stream', '');
+    const baseUrl = sentinel.streamUrl.endsWith('/stream')
+      ? sentinel.streamUrl.slice(0, -'/stream'.length)
+      : sentinel.streamUrl;
     
     console.info(`[SentinelController] Deactivating sentinel ${deviceId} - calling ${baseUrl}/control/deactivate`);
 
@@ -580,7 +586,9 @@ export const sendKeepAlive = async (req: Request, res: Response): Promise<void> 
     }
 
     // Extract base URL from stream URL
-    const baseUrl = sentinel.streamUrl.replace('/stream', '');
+    const baseUrl = sentinel.streamUrl.endsWith('/stream')
+      ? sentinel.streamUrl.slice(0, -'/stream'.length)
+      : sentinel.streamUrl;
 
     try {
       const response = await fetch(`${baseUrl}/stream/keepalive`, {
@@ -644,7 +652,9 @@ export const getPiStatus = async (req: Request, res: Response): Promise<void> =>
     }
 
     // Extract base URL from stream URL
-    const baseUrl = sentinel.streamUrl.replace('/stream', '');
+    const baseUrl = sentinel.streamUrl.endsWith('/stream')
+      ? sentinel.streamUrl.slice(0, -'/stream'.length)
+      : sentinel.streamUrl;
 
     try {
       const response = await fetch(`${baseUrl}/status`);
@@ -711,7 +721,9 @@ export const requestStreamStart = async (req: Request, res: Response): Promise<v
     // Determine base URL for control endpoints
     let baseUrl: string | null = null;
     if (sentinel.streamUrl) {
-      baseUrl = sentinel.streamUrl.replace('/stream', '');
+      baseUrl = sentinel.streamUrl.endsWith('/stream')
+        ? sentinel.streamUrl.slice(0, -'/stream'.length)
+        : sentinel.streamUrl;
     } else if (sentinel.ipAddress) {
       // Fallback to local IP/port convention if available
       baseUrl = `http://${sentinel.ipAddress}:3000`;
@@ -824,7 +836,9 @@ export const requestStreamStop = async (req: Request, res: Response): Promise<vo
     // Determine base URL for control endpoints
     let baseUrl: string | null = null;
     if (sentinel.streamUrl) {
-      baseUrl = sentinel.streamUrl.replace('/stream', '');
+      baseUrl = sentinel.streamUrl.endsWith('/stream')
+        ? sentinel.streamUrl.slice(0, -'/stream'.length)
+        : sentinel.streamUrl;
     } else if (sentinel.ipAddress) {
       baseUrl = `http://${sentinel.ipAddress}:3000`;
     }
@@ -902,7 +916,9 @@ export const restartSentinelService = async (req: Request, res: Response): Promi
     }
 
     // Extract base URL from stream URL
-    const baseUrl = sentinel.streamUrl.replace('/stream', '');
+    const baseUrl = sentinel.streamUrl.endsWith('/stream')
+      ? sentinel.streamUrl.slice(0, -'/stream'.length)
+      : sentinel.streamUrl;
     
     console.info(`[SentinelController] Requesting service restart for sentinel ${deviceId} at ${baseUrl}/control/restart`);
 
@@ -937,3 +953,82 @@ export const restartSentinelService = async (req: Request, res: Response): Promi
     });
   }
 };
+
+/**
+ * POST /api/sentinels/:deviceId/verify-vision
+ * Trigger on-demand Vision AI analysis on the Raspberry Pi
+ */
+export const verifySentinelVision = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { deviceId } = req.params;
+
+    const sentinel = await Sentinel.findOne({ deviceId: deviceId.toUpperCase() });
+
+    if (!sentinel) {
+      res.status(404).json({
+        success: false,
+        message: `Sentinel ${deviceId} not found`
+      });
+      return;
+    }
+
+    // Extract base URL from stream URL or fall back to local IP address
+    let baseUrl: string | null = null;
+    if (sentinel.streamUrl) {
+      baseUrl = sentinel.streamUrl.endsWith('/stream')
+        ? sentinel.streamUrl.slice(0, -'/stream'.length)
+        : sentinel.streamUrl;
+    } else if (sentinel.ipAddress) {
+      baseUrl = `http://${sentinel.ipAddress}:3000`;
+    }
+
+    if (!baseUrl) {
+      res.status(400).json({
+        success: false,
+        message: `Sentinel ${deviceId} has no active endpoint or stream URL configured`
+      });
+      return;
+    }
+
+    console.info(`[SentinelController] Operator requesting manual Vision AI verification for sentinel ${deviceId} at ${baseUrl}/control/verify_vision`);
+
+    const abortCtrl = new AbortController();
+    const fetchTimeout = setTimeout(() => abortCtrl.abort(), 15000);
+    try {
+      const response = await fetch(`${baseUrl}/control/verify_vision`, {
+        method: 'POST',
+        signal: abortCtrl.signal
+      });
+      clearTimeout(fetchTimeout);
+
+      if (response.ok) {
+        const data = await response.json() as { success: boolean; detected: boolean; class?: string; confidence?: number; message: string };
+        res.status(200).json({
+          success: data.success,
+          detected: data.detected,
+          class: data.class,
+          confidence: data.confidence,
+          message: data.message
+        });
+      } else {
+        throw new Error(`Pi responded with status ${response.status}`);
+      }
+    } catch (fetchError) {
+      clearTimeout(fetchTimeout);
+      console.error(`❌ Failed to request vision AI verification on Pi for ${deviceId}:`, fetchError);
+      res.status(503).json({
+        success: false,
+        message: `Failed to contact sentinel — device may be offline`,
+        error: fetchError instanceof Error ? fetchError.message : 'Unknown error'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error in verifySentinelVision:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to trigger manual Vision AI verification',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+

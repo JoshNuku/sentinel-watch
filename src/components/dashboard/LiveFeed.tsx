@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { VideoOff, Signal, WifiOff, X, AlertCircle, Moon, Camera, Maximize, RefreshCw, Power } from "lucide-react";
+import { VideoOff, Signal, WifiOff, X, AlertCircle, Moon, Camera, Maximize, RefreshCw, Power, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { getStreamUrl, sentinelAPI, alertAPI, type Sentinel } from "@/services/api";
@@ -30,6 +30,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
   const [showThreatOverlay, setShowThreatOverlay] = useState(false);
   const [latestAlertId, setLatestAlertId] = useState<string | null>(null);
   const [isRestarting, setIsRestarting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -279,6 +280,30 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
     }
   };
 
+  // Trigger on-demand Vision AI analysis
+  const handleVerifyVision = async () => {
+    if (!sentinel) return;
+    setIsVerifying(true);
+    const toastId = toast.loading("AI running object detection analysis...");
+    try {
+      const resp = await sentinelAPI.verifyVision(sentinel.deviceId);
+      if (resp.success) {
+        if (resp.detected) {
+          toast.success(resp.message || `AI threat verified! Class: ${resp.class}`, { id: toastId, duration: 5000 });
+        } else {
+          toast.info(resp.message || "AI analysis complete. No threats detected in the frame.", { id: toastId, duration: 5000 });
+        }
+      } else {
+        toast.error(resp.message || "AI verification failed.", { id: toastId });
+      }
+    } catch (err) {
+      console.error("AI verification failed:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to contact sentinel for AI verification.", { id: toastId });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
 
 
   // Update stream URL when sentinel changes
@@ -392,7 +417,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
     })();
 
     return () => { mounted = false; };
-  }, [sentinel?.deviceId, sentinel]);
+  }, [sentinel?.deviceId]);
 
   // Cleanup on unmount - deactivate sentinel
   useEffect(() => {
@@ -668,11 +693,11 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
 
       {/* Action Buttons */}
       {sentinel && (
-        <div className="flex gap-2 mt-4">
+        <div className="flex flex-wrap gap-2 mt-4">
           <Button 
             variant="outline" 
             size="sm" 
-            className="flex-1 gap-2 border-warning/30 hover:border-warning/50 hover:bg-warning/10 text-warning"
+            className="flex-1 min-w-[120px] sm:min-w-[140px] lg:min-w-0 gap-2 border-warning/30 hover:border-warning/50 hover:bg-warning/10 text-warning"
             onClick={handleRestartService}
             disabled={isRestarting}
           >
@@ -683,9 +708,19 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
           {(streamUrl || isManualRequested) && !imageError && (
             <>
               <Button 
+                variant="glow" 
+                size="sm" 
+                className="flex-1 min-w-[120px] sm:min-w-[140px] lg:min-w-0 gap-2 bg-primary/20 hover:bg-primary/30 border-primary/30"
+                onClick={handleVerifyVision}
+                disabled={isVerifying}
+              >
+                <Eye className={`h-4 w-4 ${isVerifying ? 'animate-pulse' : ''}`} />
+                {isVerifying ? 'Analyzing...' : 'Verify with AI'}
+              </Button>
+              <Button 
                 variant="outline" 
                 size="sm" 
-                className="flex-1 gap-2"
+                className="flex-1 min-w-[100px] sm:min-w-[120px] lg:min-w-0 gap-2"
                 onClick={handleStopStream}
                 disabled={isDeactivating}
               >
@@ -695,7 +730,7 @@ const LiveFeed = ({ sentinel, onClose, onStreamStateChange, externalManualReques
               <Button 
                 variant="glow" 
                 size="sm" 
-                className="flex-1"
+                className="flex-1 min-w-[100px] sm:min-w-[120px] lg:min-w-0"
                 onClick={handleFullscreen}
               >
                 <Maximize className="mr-2 h-4 w-4" /> Full Screen

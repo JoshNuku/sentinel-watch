@@ -222,6 +222,15 @@ export const sentinelAPI = {
       method: 'POST',
     });
   },
+
+  /**
+   * Trigger manual on-demand Vision AI analysis on Raspberry Pi
+   */
+  verifyVision: async (deviceId: string): Promise<ApiResponse<{ success: boolean; detected: boolean; class?: string; confidence?: number; message: string }>> => {
+    return fetchAPI<ApiResponse<{ success: boolean; detected: boolean; class?: string; confidence?: number; message: string }>>(`/sentinels/${deviceId}/verify-vision`, {
+      method: 'POST',
+    });
+  },
 };
 
 /**
